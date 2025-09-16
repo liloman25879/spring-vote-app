@@ -462,24 +462,33 @@ def main():
             key="user_input"
         )
         
-        # Sauvegarder le nom dans session_state
-        if user_name:
+        # Sauvegarder le nom dans session_state et forcer la mise à jour
+        if user_name and user_name != st.session_state.user_name:
             st.session_state.user_name = user_name
+            st.rerun()
+        
+        # Bouton de connexion rapide
+        if not st.session_state.user_name and user_name:
+            if st.button("🔑 Se connecter", use_container_width=True):
+                st.session_state.user_name = user_name
+                st.rerun()
         
         # Bouton de déconnexion
         if st.session_state.user_name:
             col1, col2 = st.columns([3, 1])
+            with col1:
+                st.success(f"✅ Connecté : {st.session_state.user_name}")
             with col2:
                 if st.button("🚪 Déco"):
                     st.session_state.user_name = ""
                     st.rerun()
         
-        if user_name:
+        # Section de vote - visible seulement si connecté
+        if st.session_state.user_name:
+            user_name = st.session_state.user_name  # Utiliser le nom de session_state
             user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_name))
             user_tokens = get_user_tokens(user_id, users)
             users[user_id]["name"] = user_name
-            
-            st.success(f"Connecté : {user_name}")
             
             # Affichage des tokens restants
             st.subheader("🪙 Vos tokens restants :")
@@ -601,10 +610,15 @@ def main():
                     else:
                         st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{current_task['name']}", use_container_width=True)
         
+        else:
+            # Message d'invitation à se connecter
+            st.info("👆 Entrez votre nom ci-dessus pour commencer à voter")
+        
         st.markdown("---")
         
-        # Section pour ajouter une nouvelle tâche
-        st.subheader("➕ Proposer une nouvelle tâche")
+        # Section pour ajouter une nouvelle tâche - visible seulement si connecté
+        if st.session_state.user_name:
+            st.subheader("➕ Proposer une nouvelle tâche")
         
         with st.form("new_task_form"):
             new_task_name = st.text_input("Nom de la tâche :")
@@ -643,6 +657,9 @@ def main():
                     st.rerun()
                 else:
                     st.error("Erreur lors de l'ajout de la tâche")
+        else:
+            # Message pour les utilisateurs non connectés
+            st.info("👆 Connectez-vous pour proposer de nouvelles tâches")
     
     # Zone principale - Visualisation
     main_col1, main_col2 = st.columns([2, 1])
