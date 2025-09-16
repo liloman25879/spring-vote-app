@@ -237,7 +237,7 @@ def load_csv_data():
                 return None
         else:
             # Fallback local
-            df = pd.read_csv('evaluation_taches_spring.csv', 
+            df = pd.read_csv('https://raw.githubusercontent.com/liloman25879/spring-vote-app/main/evaluation_taches_spring.csv', 
                             sep=';', 
                             encoding='iso-8859-1')
         
@@ -644,3 +644,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
