@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import json
-import os
 from datetime import datetime
 import uuid
 import requests
@@ -136,99 +135,29 @@ def save_to_github(filename, data):
         # Silencieux - pas d'affichage d'erreur à l'utilisateur
         return False
 
-def initialize_github_files():
-    """Initialise les fichiers GitHub s'ils n'existent pas (silencieux)"""
-    if not st.secrets.get("use_github", False):
-        return
-    
-    try:
-        # Fichiers à créer avec leurs structures par défaut
-        files_to_init = {
-            "votes_spring_meeting.json": {},
-            "users_spring_meeting.json": {},
-            "tasks_spring_meeting.json": []
-        }
-        
-        for filename, default_data in files_to_init.items():
-            # Vérifier si le fichier existe
-            response = github_api_request("GET", filename)
-            if not response or response.status_code == 404:
-                # Le fichier n'existe pas, le créer
-                save_to_github(filename, default_data)
-    except:
-        # Silencieux - si ça ne marche pas, on continue en mode local
-        pass
-
 def load_data():
-    """Charge les données de votes, utilisateurs et tâches"""
-    # Initialiser les fichiers GitHub si nécessaire
-    initialize_github_files()
-    
-    if st.secrets.get("use_github", False):
-        votes = load_from_github("votes_spring_meeting.json")
-        users = load_from_github("users_spring_meeting.json") 
-        additional_tasks = load_from_github("tasks_spring_meeting.json")
-    else:
-        # Fallback local pour développement
-        votes = {}
-        users = {}
-        additional_tasks = []
-        
-        for filename, default in [("votes_spring_meeting.json", {}), 
-                                ("users_spring_meeting.json", {}),
-                                ("tasks_spring_meeting.json", [])]:
-            if os.path.exists(filename):
-                try:
-                    with open(filename, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        if filename == "votes_spring_meeting.json":
-                            votes = data
-                        elif filename == "users_spring_meeting.json":
-                            users = data
-                        else:
-                            additional_tasks = data
-                except:
-                    pass
+    """Charge les données de votes, utilisateurs et tâches depuis GitHub uniquement"""
+    votes = load_from_github("votes_spring_meeting.json")
+    users = load_from_github("users_spring_meeting.json") 
+    additional_tasks = load_from_github("tasks_spring_meeting.json")
     
     return votes, users, additional_tasks
 
 def save_data(votes, users, additional_tasks):
-    """Sauvegarde toutes les données (silencieux avec feedback discret)"""
+    """Sauvegarde toutes les données sur GitHub uniquement"""
     success_count = 0
     
-    if st.secrets.get("use_github", False):
-        # Tentative de sauvegarde GitHub en arrière-plan, silencieuse
-        if save_to_github("votes_spring_meeting.json", votes):
-            success_count += 1
-        if save_to_github("users_spring_meeting.json", users):
-            success_count += 1
-        if save_to_github("tasks_spring_meeting.json", additional_tasks):
-            success_count += 1
-        
-        # Stocker le statut dans session_state pour affichage discret
-        st.session_state.last_save_status = f"GitHub: {success_count}/3 fichiers sauvés"
-        st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
-    else:
-        # Sauvegarde locale en fallback
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        for filename, data in [("votes_spring_meeting.json", votes), 
-                             ("users_spring_meeting.json", users), 
-                             ("tasks_spring_meeting.json", additional_tasks)]:
-            try:
-                if os.path.exists(filename):
-                    backup_name = f"{filename}.backup_{timestamp}"
-                    os.rename(filename, backup_name)
-                
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                success_count += 1
-            except:
-                # Silencieux même en local
-                pass
-        
-        st.session_state.last_save_status = f"Local: {success_count}/3 fichiers sauvés"
-        st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
+    # Sauvegarde GitHub uniquement
+    if save_to_github("votes_spring_meeting.json", votes):
+        success_count += 1
+    if save_to_github("users_spring_meeting.json", users):
+        success_count += 1
+    if save_to_github("tasks_spring_meeting.json", additional_tasks):
+        success_count += 1
+    
+    # Stocker le statut dans session_state pour affichage discret
+    st.session_state.last_save_status = f"GitHub: {success_count}/3 fichiers sauvés"
+    st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
 
 def get_user_tokens(user_id, users):
     """Récupère les tokens restants pour un utilisateur"""
@@ -342,17 +271,13 @@ def get_all_tasks(df, additional_tasks):
 def main():
     st.title("🗳️ SPRING - Vote Collaboratif Cloud")
     
-    # Vérification discrète de la configuration
-    github_enabled = st.secrets.get("use_github", False)
-    if github_enabled:
-        # Test silencieux de la connexion GitHub
-        test_response = github_api_request("GET", "evaluation_taches_spring.csv")
-        if test_response and test_response.status_code == 200:
-            st.success("🌐 Mode Cloud activé")
-        else:
-            st.info("💻 Mode Local actif")
+    # Test de connexion GitHub
+    test_response = github_api_request("GET", "evaluation_taches_spring.csv")
+    if test_response and test_response.status_code == 200:
+        st.success("🌐 Connecté au Cloud GitHub")
     else:
-        st.info("💻 Mode Local - Données en mémoire")
+        st.error("❌ Impossible de se connecter à GitHub - Vérifiez la configuration des secrets")
+        st.stop()
     
     # Section de rafraîchissement automatique
     with st.sidebar:
