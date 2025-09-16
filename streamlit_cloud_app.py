@@ -343,6 +343,14 @@ def main():
     st.title("🗳️ SPRING - Système de Vote Collaboratif")
     st.markdown("---")
     
+    # Initialiser toutes les variables de session_state en premier
+    if 'user_name' not in st.session_state:
+        st.session_state.user_name = ""
+    if 'current_task_index' not in st.session_state:
+        st.session_state.current_task_index = 0
+    if 'last_data_timestamp' not in st.session_state:
+        st.session_state.last_data_timestamp = ""
+    
     # Initialiser Firebase
     firebase_ref = init_firebase()
     
@@ -420,8 +428,11 @@ def main():
     
     with col3:
         if st.session_state.last_data_timestamp:
-            last_update_time = datetime.fromisoformat(st.session_state.last_data_timestamp.replace('Z', '+00:00'))
-            st.caption(f"Dernière MAJ: {last_update_time.strftime('%H:%M:%S')}")
+            try:
+                last_update_time = datetime.fromisoformat(st.session_state.last_data_timestamp.replace('Z', '+00:00'))
+                st.caption(f"Dernière MAJ: {last_update_time.strftime('%H:%M:%S')}")
+            except:
+                st.caption("Dernière MAJ: --:--:--")
     
     with col4:
         if st.session_state.user_name:
@@ -442,10 +453,6 @@ def main():
     # Sidebar pour le système de vote
     with st.sidebar:
         st.header("🎯 Système de Vote")
-        
-        # Initialiser le nom d'utilisateur dans session_state
-        if 'user_name' not in st.session_state:
-            st.session_state.user_name = ""
         
         # Identification utilisateur avec persistance
         user_name = st.text_input(
@@ -489,10 +496,6 @@ def main():
             
             # Interface de vote avec ordre fixe
             st.subheader("📊 Vote Collectif - Ordre Fixe")
-            
-            # Initialiser l'index de la tâche actuelle dans session_state
-            if 'current_task_index' not in st.session_state:
-                st.session_state.current_task_index = 0
             
             # S'assurer que l'index est dans les limites
             if st.session_state.current_task_index >= len(all_tasks):
