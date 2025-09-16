@@ -489,6 +489,26 @@ def main():
     votes = st.session_state.votes_data
     users = st.session_state.users_data
     additional_tasks = st.session_state.additional_tasks_data
+
+    # Verrou anti double-clic (générique)
+    LOCK_WINDOW_SEC = 0.5
+    if 'click_locks' not in st.session_state:
+        st.session_state.click_locks = {}
+
+    def is_locked(lock_key: str) -> bool:
+        t = st.session_state.click_locks.get(lock_key)
+        return bool(t and (time.time() - t) < LOCK_WINDOW_SEC)
+
+    def lock_now(lock_key: str):
+        st.session_state.click_locks[lock_key] = time.time()
+
+    # Nettoyage des verrous expirés
+    try:
+        expired_keys = [k for k, t0 in st.session_state.click_locks.items() if (time.time() - t0) >= LOCK_WINDOW_SEC]
+        for k in expired_keys:
+            del st.session_state.click_locks[k]
+    except Exception:
+        pass
     
     # Boutons de contrôle
     col1, col2, col3, col4 = st.columns([1, 1, 2, 2])
@@ -691,10 +711,14 @@ def main():
                 
                 with vote_cols[i]:
                     stars = "⭐" * vote_value
-                    
+                    task_key = task_key_from_task(current_task)
+                    btn_key = f"vote_{vote_value}_{task_key}"
+                    btn_lock_key = f"vote:{user_id}:{task_key}:{vote_value}"
+                    disabled = remaining <= 0 or is_locked(btn_lock_key)
                     if remaining > 0:
-                        task_key = task_key_from_task(current_task)
-                        if st.button(f"{stars}\n({remaining})", key=f"vote_{vote_value}_{task_key}", use_container_width=True):
+                        if st.button(f"{stars}\n({remaining})", key=btn_key, use_container_width=True, disabled=disabled):
+                            # Verrouillage immédiat pour éviter le double-clic
+                            lock_now(btn_lock_key)
                             # Enregistrer le vote
                             task_key = task_key  # déjà calculé
                             # Cloud mode
@@ -745,7 +769,7 @@ def main():
                                 else:
                                     st.error("Erreur lors de l'enregistrement du vote (local)")
                     else:
-                        st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{current_task['name']}", use_container_width=True)
+                        st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{task_key}", use_container_width=True)
         
         else:
             # Message d'invitation à se connecter
@@ -769,9 +793,11 @@ def main():
                 with col3:
                     new_interest = st.slider("Intérêt", 1, 5, 3)
                 
-                submitted = st.form_submit_button("🚀 Proposer la tâche")
+                form_lock_key = f"new_task_form:{st.session_state.user_name or 'anon'}"
+                submitted = st.form_submit_button("🚀 Proposer la tâche", disabled=is_locked(form_lock_key))
                 
                 if submitted and new_task_name and new_task_desc and st.session_state.user_name:
+                    lock_now(form_lock_key)
                     new_task = {
                         "id": str(uuid.uuid4()),
                         "name": new_task_name,
@@ -812,9 +838,9 @@ def main():
     with main_col1:
         st.subheader("📈 Visualisation 3D des Tâches SPRING")
         
-    # Créer un DataFrame combiné pour la visualisation
+        # Créer un DataFrame combiné pour la visualisation
         combined_data = []
-    tasks_by_id = {t.get('id', t['name']): t for t in all_tasks}
+        tasks_by_id = {t.get('id', t['name']): t for t in all_tasks}
         
         for task in all_tasks:
             # Calculer le score d'intérêt avec les votes
