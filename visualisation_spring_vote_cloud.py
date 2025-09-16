@@ -222,34 +222,14 @@ def get_real_description(task_name):
     return "Description à compléter selon les critères SPRING"
 
 def load_csv_data():
-    """Charge les données du CSV"""
+    """Charge les données CSV depuis GitHub ou localement."""
     try:
-        # Essayer de charger depuis GitHub d'abord si configuré
-        if st.secrets.get("use_github", False):
-            response = github_api_request("GET", "evaluation_taches_spring.csv")
-            if response.status_code == 200:
-                content = response.json()["content"]
-                decoded_content = base64.b64decode(content).decode('iso-8859-1')
-                from io import StringIO
-                df = pd.read_csv(StringIO(decoded_content), sep=';')
-            else:
-                st.error("Impossible de charger le CSV depuis GitHub")
-                return None
-        else:
-            # Fallback local
-            df = pd.read_csv('https://raw.githubusercontent.com/liloman25879/spring-vote-app/main/evaluation_taches_spring.csv', 
-                            sep=';', 
-                            encoding='iso-8859-1')
-        
-        # Nettoyer les données numériques
-        numeric_cols = ['Cout', 'Score_Prix', 'Score_Complexité', 'Score_Intérêt', 'Score_Total']
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(',', '.').astype(float)
-        
+        # URL Raw directe (plus simple et fiable)
+        csv_url = "https://raw.githubusercontent.com/liloman25879/spring-vote-app/main/evaluation_taches_spring.csv"
+        df = pd.read_csv(csv_url, sep=';', encoding='iso-8859-1')
         return df
     except Exception as e:
-        st.error(f"Erreur lors du chargement du CSV : {e}")
+        st.error(f"❌ Erreur de chargement CSV : {e}")
         return None
 
 def get_all_tasks(df, additional_tasks):
@@ -644,4 +624,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
