@@ -393,8 +393,8 @@ def main():
             st.session_state.last_data_timestamp = last_updated
             st.rerun()
     
-    #with col2:
-        #live_mode = st.checkbox("🔴 Live", value=False, help="Synchronisation temps réel")
+    with col2:
+        live_mode = st.checkbox("🔴 Live", value=True, help="Synchronisation temps réel")
     
     # Mécanisme de polling intelligent
     if live_mode and firebase_ref is not None:
@@ -426,7 +426,7 @@ def main():
             time.sleep(0.1)
             st.rerun()
     
-    with col2:
+    with col3:
         if st.session_state.last_data_timestamp:
             try:
                 last_update_time = datetime.fromisoformat(st.session_state.last_data_timestamp.replace('Z', '+00:00'))
@@ -434,7 +434,7 @@ def main():
             except:
                 st.caption("Dernière MAJ: --:--:--")
     
-    with col3:
+    with col4:
         if st.session_state.user_name:
             st.success(f"👤 {st.session_state.user_name}")
         else:
