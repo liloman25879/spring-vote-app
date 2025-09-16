@@ -98,45 +98,7 @@ def init_firebase():
         # Fallback vers stockage local en cas d'erreur
         return None
 
-def load_data_firebase(firebase_ref):
-    """Charge les données depuis Firebase"""
-    try:
-        if firebase_ref is None:
-            # Fallback vers fichiers locaux
-            return load_data_local()
-        
-        # Charger depuis Firebase
-        data = firebase_ref.get() or {}
-        
-        votes = data.get('votes', {})
-        users = data.get('users', {})
-        additional_tasks = data.get('additional_tasks', [])
-        
-        return votes, users, additional_tasks
-    except Exception as e:
-        st.error(f"Erreur chargement Firebase: {str(e)}")
-        return {}, {}, []
-
-def save_data_firebase(firebase_ref, votes, users, additional_tasks):
-    """Sauvegarde les données dans Firebase"""
-    try:
-        if firebase_ref is None:
-            # Fallback vers fichiers locaux
-            return save_data_local(votes, users, additional_tasks)
-        
-        # Sauvegarder dans Firebase
-        data = {
-            'votes': votes,
-            'users': users,
-            'additional_tasks': additional_tasks,
-            'last_updated': datetime.now().isoformat()
-        }
-        
-        firebase_ref.set(data)
-        return True
-    except Exception as e:
-        st.error(f"Erreur sauvegarde Firebase: {str(e)}")
-        return False
+# (Ancien) chargement/écriture Firebase globaux supprimés au profit d'opérations granulaires
 
 def load_data_local():
     """Charge les données depuis les fichiers locaux (fallback)"""
@@ -731,9 +693,10 @@ def main():
                     stars = "⭐" * vote_value
                     
                     if remaining > 0:
-                        if st.button(f"{stars}\n({remaining})", key=f"vote_{vote_value}_{current_task['name']}", use_container_width=True):
+                        task_key = task_key_from_task(current_task)
+                        if st.button(f"{stars}\n({remaining})", key=f"vote_{vote_value}_{task_key}", use_container_width=True):
                             # Enregistrer le vote
-                            task_key = task_key_from_task(current_task)
+                            task_key = task_key  # déjà calculé
                             # Cloud mode
                             if firebase_ref is not None:
                                 # Vérifier token distant, décrémenter, puis enregistrer le vote
@@ -849,8 +812,9 @@ def main():
     with main_col1:
         st.subheader("📈 Visualisation 3D des Tâches SPRING")
         
-        # Créer un DataFrame combiné pour la visualisation
+    # Créer un DataFrame combiné pour la visualisation
         combined_data = []
+    tasks_by_id = {t.get('id', t['name']): t for t in all_tasks}
         
         for task in all_tasks:
             # Calculer le score d'intérêt avec les votes
@@ -891,18 +855,13 @@ def main():
         hover_text = []
         for index, row in df_display.iterrows():
             task_name = row['Nouveau_Nom']
-            
-            # Rechercher la tâche dans all_tasks par nom exact
-            original_task = None
-            for task in all_tasks:
-                if task['name'] == task_name:
-                    original_task = task
-                    break
-            
+            task_id = row.get('Task_ID')
+            # Rechercher par ID en priorité (évite collisions de noms)
+            original_task = tasks_by_id.get(task_id)
             # Utiliser les vraies données de la tâche
             if original_task:
-                description = original_task['description']
-                display_name = original_task['name']
+                description = original_task.get('description', 'Description non trouvée')
+                display_name = original_task.get('name', task_name)
             else:
                 description = "Description non trouvée"
                 display_name = task_name
