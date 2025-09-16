@@ -246,7 +246,7 @@ def get_real_description(task_name):
         return DESCRIPTIONS_REELLES[task_name]
     return "Description à compléter selon les critères SPRING"
 
-@st.cache_data(ttl=10)  # Cache pendant 10 secondes pour éviter trop de rechargements
+@st.cache_data(ttl=300)  # Cache le CSV pendant 5 minutes (il ne change pas souvent)
 def load_csv_data():
     """Charge les données du CSV"""
     try:
@@ -264,6 +264,43 @@ def load_csv_data():
     except Exception as e:
         st.error(f"Erreur lors du chargement du CSV : {e}")
         return None
+
+def load_live_data(firebase_ref):
+    """Charge les données en temps réel sans cache"""
+    try:
+        if firebase_ref is None:
+            return load_data_local()
+        
+        # Charger directement depuis Firebase sans cache
+        data = firebase_ref.get() or {}
+        
+        votes = data.get('votes', {})
+        users = data.get('users', {})
+        additional_tasks = data.get('additional_tasks', [])
+        last_updated = data.get('last_updated', '')
+        
+        return votes, users, additional_tasks, last_updated
+    except Exception as e:
+        st.error(f"Erreur chargement live: {str(e)}")
+        return {}, {}, [], ""
+
+def check_for_updates(firebase_ref):
+    """Vérifie s'il y a des mises à jour sans recharger la page"""
+    if 'last_data_timestamp' not in st.session_state:
+        st.session_state.last_data_timestamp = ""
+    
+    try:
+        if firebase_ref is not None:
+            # Vérifier seulement le timestamp de dernière mise à jour
+            last_updated = firebase_ref.child('last_updated').get()
+            
+            if last_updated and last_updated != st.session_state.last_data_timestamp:
+                st.session_state.last_data_timestamp = last_updated
+                return True
+        
+        return False
+    except Exception:
+        return False
 
 def get_all_tasks(df, additional_tasks):
     """Combine les tâches du CSV et les nouvelles tâches proposées"""
@@ -315,28 +352,84 @@ def main():
     else:
         st.warning("⚠️ Mode local - Les données ne seront pas synchronisées")
     
-    # Auto-refresh pour la synchronisation (toutes les 30 secondes)
-    if 'last_refresh' not in st.session_state:
-        st.session_state.last_refresh = time.time()
+    # Initialiser les données dans session_state
+    if 'votes_data' not in st.session_state:
+        votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
+        st.session_state.votes_data = votes
+        st.session_state.users_data = users
+        st.session_state.additional_tasks_data = additional_tasks
+        st.session_state.last_data_timestamp = last_updated
     
-    # Bouton de refresh manuel
-    col1, col2, col3 = st.columns([1, 1, 4])
+    # Vérification initiale des mises à jour en arrière-plan (une seule fois par chargement)
+    if firebase_ref is not None and 'initial_load_done' not in st.session_state:
+        votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
+        st.session_state.votes_data = votes
+        st.session_state.users_data = users
+        st.session_state.additional_tasks_data = additional_tasks
+        st.session_state.initial_load_done = True
+    
+    # Utiliser les données du session_state
+    votes = st.session_state.votes_data
+    users = st.session_state.users_data
+    additional_tasks = st.session_state.additional_tasks_data
+    
+    # Boutons de contrôle
+    col1, col2, col3, col4 = st.columns([1, 1, 2, 2])
     with col1:
         if st.button("🔄 Actualiser"):
-            st.cache_data.clear()
+            # Force le rechargement des données
+            votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
+            st.session_state.votes_data = votes
+            st.session_state.users_data = users
+            st.session_state.additional_tasks_data = additional_tasks
+            st.session_state.last_data_timestamp = last_updated
             st.rerun()
     
     with col2:
-        auto_refresh = st.checkbox("Auto-refresh", value=True)
+        live_mode = st.checkbox("🔴 Live", value=True, help="Synchronisation temps réel")
     
-    # Auto-refresh automatique
-    if auto_refresh and time.time() - st.session_state.last_refresh > 30:
-        st.session_state.last_refresh = time.time()
-        st.cache_data.clear()
-        st.rerun()
+    # Mécanisme de polling intelligent
+    if live_mode and firebase_ref is not None:
+        # Utiliser un placeholder pour déclencher le polling
+        placeholder = st.empty()
+        
+        # Vérifier s'il est temps de faire un poll
+        current_time = time.time()
+        if 'last_poll' not in st.session_state:
+            st.session_state.last_poll = current_time
+        
+        if current_time - st.session_state.last_poll > 5:  # 5 secondes
+            st.session_state.last_poll = current_time
+            
+            if check_for_updates(firebase_ref):
+                # Mettre à jour les données silencieusement
+                votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
+                st.session_state.votes_data = votes
+                st.session_state.users_data = users
+                st.session_state.additional_tasks_data = additional_tasks
+                
+                # Notification discrète de mise à jour
+                with placeholder:
+                    st.success("🔄 Nouvelles données détectées", icon="🔄")
+                    time.sleep(1)
+                    placeholder.empty()
+            
+            # Programmer le prochain poll
+            time.sleep(0.1)
+            st.rerun()
     
-    # Charger les données
-    votes, users, additional_tasks = load_data_firebase(firebase_ref)
+    with col3:
+        if st.session_state.last_data_timestamp:
+            last_update_time = datetime.fromisoformat(st.session_state.last_data_timestamp.replace('Z', '+00:00'))
+            st.caption(f"Dernière MAJ: {last_update_time.strftime('%H:%M:%S')}")
+    
+    with col4:
+        if st.session_state.user_name:
+            st.success(f"👤 {st.session_state.user_name}")
+        else:
+            st.info("👤 Non connecté")
+    
+    # Charger les données CSV (cachées plus longtemps car statiques)
     df = load_csv_data()
     
     if df is None and not additional_tasks:
@@ -350,8 +443,29 @@ def main():
     with st.sidebar:
         st.header("🎯 Système de Vote")
         
-        # Identification utilisateur
-        user_name = st.text_input("Votre nom :", placeholder="Entrez votre nom")
+        # Initialiser le nom d'utilisateur dans session_state
+        if 'user_name' not in st.session_state:
+            st.session_state.user_name = ""
+        
+        # Identification utilisateur avec persistance
+        user_name = st.text_input(
+            "Votre nom :", 
+            value=st.session_state.user_name,
+            placeholder="Entrez votre nom",
+            key="user_input"
+        )
+        
+        # Sauvegarder le nom dans session_state
+        if user_name:
+            st.session_state.user_name = user_name
+        
+        # Bouton de déconnexion
+        if st.session_state.user_name:
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🚪 Déco"):
+                    st.session_state.user_name = ""
+                    st.rerun()
         
         if user_name:
             user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_name))
@@ -474,8 +588,10 @@ def main():
                             # Sauvegarder dans le cloud
                             if save_data_firebase(firebase_ref, votes, users, additional_tasks):
                                 st.success(f"Vote enregistré : {vote_value}/5")
-                                st.cache_data.clear()  # Forcer le refresh des données
-                                time.sleep(1)  # Laisser le temps à Firebase de se synchroniser
+                                # Mettre à jour les données locales immédiatement
+                                st.session_state.votes_data = votes
+                                st.session_state.users_data = users
+                                time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
                                 st.rerun()
                             else:
                                 st.error("Erreur lors de l'enregistrement du vote")
@@ -501,7 +617,7 @@ def main():
             
             submitted = st.form_submit_button("🚀 Proposer la tâche")
             
-            if submitted and new_task_name and new_task_desc and user_name:
+            if submitted and new_task_name and new_task_desc and st.session_state.user_name:
                 new_task = {
                     "id": str(uuid.uuid4()),
                     "name": new_task_name,
@@ -509,7 +625,7 @@ def main():
                     "cost": new_cost,
                     "complexity": new_complexity,
                     "interest": new_interest,
-                    "proposed_by": user_name,
+                    "proposed_by": st.session_state.user_name,
                     "timestamp": datetime.now().isoformat()
                 }
                 
@@ -518,8 +634,9 @@ def main():
                 # Sauvegarder dans le cloud
                 if save_data_firebase(firebase_ref, votes, users, additional_tasks):
                     st.success(f"Nouvelle tâche proposée : '{new_task_name}'")
-                    st.cache_data.clear()  # Forcer le refresh des données
-                    time.sleep(1)  # Laisser le temps à Firebase de se synchroniser
+                    # Mettre à jour les données locales immédiatement
+                    st.session_state.additional_tasks_data = additional_tasks
+                    time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
                     st.rerun()
                 else:
                     st.error("Erreur lors de l'ajout de la tâche")
@@ -646,7 +763,7 @@ def main():
         st.metric("Nouvelles tâches proposées", len(additional_tasks))
         
         # Affichage de la tâche actuelle dans le vote collectif
-        if user_name and 'current_task_index' in st.session_state:
+        if st.session_state.user_name and 'current_task_index' in st.session_state:
             current_task = all_tasks[st.session_state.current_task_index]
             st.info(f"**Vote collectif :**\nTâche {st.session_state.current_task_index + 1}/{len(all_tasks)}\n*{current_task['name']}*")
         
