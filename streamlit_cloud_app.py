@@ -732,13 +732,27 @@ def main():
                                         # Mettre à jour le cache local pour réactivité immédiate
                                         if task_key not in votes:
                                             votes[task_key] = {}
-                                        if user_id not in votes[task_key]:
-                                            votes[task_key][user_id] = []
-                                        votes[task_key][user_id].append({
+                                        # Construire l'objet vote une seule fois
+                                        vote_obj = {
                                             "score": vote_value,
                                             "timestamp": datetime.now().isoformat(),
                                             "user_name": user_name
-                                        })
+                                        }
+                                        # Selon la forme existante (liste legacy ou dict pushIds), mettre à jour en conséquence
+                                        if user_id not in votes[task_key]:
+                                            # Par défaut, utiliser une liste locale pour la première écriture
+                                            votes[task_key][user_id] = [vote_obj]
+                                        else:
+                                            container = votes[task_key][user_id]
+                                            if isinstance(container, list):
+                                                container.append(vote_obj)
+                                            elif isinstance(container, dict):
+                                                # Ajouter sous une clé locale simulant un pushId pour rester compatible
+                                                local_key = f"local_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
+                                                container[local_key] = vote_obj
+                                            else:
+                                                # Forme inattendue, réinitialiser proprement
+                                                votes[task_key][user_id] = [vote_obj]
                                         users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
                                         st.session_state.votes_data = votes
                                         st.session_state.users_data = users
@@ -752,13 +766,23 @@ def main():
                                 name_key = sanitize_key(current_task['name'])
                                 if name_key not in votes:
                                     votes[name_key] = {}
-                                if user_id not in votes[name_key]:
-                                    votes[name_key][user_id] = []
-                                votes[name_key][user_id].append({
+                                # Construire l'objet vote
+                                vote_obj = {
                                     "score": vote_value,
                                     "timestamp": datetime.now().isoformat(),
                                     "user_name": user_name
-                                })
+                                }
+                                if user_id not in votes[name_key]:
+                                    votes[name_key][user_id] = [vote_obj]
+                                else:
+                                    container = votes[name_key][user_id]
+                                    if isinstance(container, list):
+                                        container.append(vote_obj)
+                                    elif isinstance(container, dict):
+                                        local_key = f"local_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
+                                        container[local_key] = vote_obj
+                                    else:
+                                        votes[name_key][user_id] = [vote_obj]
                                 users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
                                 if save_data_local(votes, users, additional_tasks):
                                     st.session_state.votes_data = votes
