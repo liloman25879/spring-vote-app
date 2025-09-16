@@ -97,10 +97,16 @@ def load_from_github(filename):
             content = response.json()["content"]
             decoded_content = base64.b64decode(content).decode('utf-8')
             return json.loads(decoded_content)
-        return {}
+        # Retourner le bon type par défaut selon le fichier
+        if "tasks" in filename:
+            return []  # Liste pour les tâches
+        return {}  # Dictionnaire pour votes et users
     except Exception as e:
         st.error(f"Erreur chargement {filename} : {e}")
-        return {}
+        # Retourner le bon type par défaut selon le fichier
+        if "tasks" in filename:
+            return []  # Liste pour les tâches
+        return {}  # Dictionnaire pour votes et users
 
 def save_to_github(filename, data):
     """Sauvegarde un fichier sur GitHub"""
@@ -680,4 +686,5 @@ def main():
             )
 
 if __name__ == "__main__":
+
     main()
