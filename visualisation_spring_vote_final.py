@@ -136,27 +136,53 @@ def save_to_github(filename, data):
         return False
 
 def load_data():
-    """Charge les données de votes, utilisateurs et tâches depuis GitHub uniquement"""
-    votes = load_from_github("votes_spring_meeting.json")
-    users = load_from_github("users_spring_meeting.json") 
-    additional_tasks = load_from_github("tasks_spring_meeting.json")
+    """Charge les données de votes, utilisateurs et tâches (GitHub si disponible, sinon session_state)"""
+    # Essayer de charger depuis GitHub
+    try:
+        if st.secrets.get("github_token", ""):
+            votes = load_from_github("votes_spring_meeting.json")
+            users = load_from_github("users_spring_meeting.json") 
+            additional_tasks = load_from_github("tasks_spring_meeting.json")
+            return votes, users, additional_tasks
+    except:
+        pass
     
-    return votes, users, additional_tasks
+    # Fallback vers session_state pour le développement local
+    if 'votes_data' not in st.session_state:
+        st.session_state.votes_data = {}
+    if 'users_data' not in st.session_state:
+        st.session_state.users_data = {}
+    if 'tasks_data' not in st.session_state:
+        st.session_state.tasks_data = []
+    
+    return st.session_state.votes_data, st.session_state.users_data, st.session_state.tasks_data
 
 def save_data(votes, users, additional_tasks):
-    """Sauvegarde toutes les données sur GitHub uniquement"""
+    """Sauvegarde toutes les données (GitHub si disponible, sinon session_state)"""
     success_count = 0
     
-    # Sauvegarde GitHub uniquement
-    if save_to_github("votes_spring_meeting.json", votes):
-        success_count += 1
-    if save_to_github("users_spring_meeting.json", users):
-        success_count += 1
-    if save_to_github("tasks_spring_meeting.json", additional_tasks):
-        success_count += 1
+    # Essayer de sauvegarder sur GitHub
+    try:
+        if st.secrets.get("github_token", ""):
+            if save_to_github("votes_spring_meeting.json", votes):
+                success_count += 1
+            if save_to_github("users_spring_meeting.json", users):
+                success_count += 1
+            if save_to_github("tasks_spring_meeting.json", additional_tasks):
+                success_count += 1
+            
+            st.session_state.last_save_status = f"GitHub: {success_count}/3 fichiers sauvés"
+            st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
+            return
+    except:
+        pass
     
-    # Stocker le statut dans session_state pour affichage discret
-    st.session_state.last_save_status = f"GitHub: {success_count}/3 fichiers sauvés"
+    # Fallback vers session_state pour le développement local
+    st.session_state.votes_data = votes
+    st.session_state.users_data = users
+    st.session_state.tasks_data = additional_tasks
+    
+    st.session_state.last_save_status = "Local: session en cours"
     st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
 
 def get_user_tokens(user_id, users):
@@ -271,13 +297,18 @@ def get_all_tasks(df, additional_tasks):
 def main():
     st.title("🗳️ SPRING - Vote Collaboratif Cloud")
     
-    # Test de connexion GitHub
-    test_response = github_api_request("GET", "evaluation_taches_spring.csv")
-    if test_response and test_response.status_code == 200:
-        st.success("🌐 Connecté au Cloud GitHub")
-    else:
-        st.error("❌ Impossible de se connecter à GitHub - Vérifiez la configuration des secrets")
-        st.stop()
+    # Test de connexion GitHub (optionnel en local)
+    github_available = False
+    try:
+        test_response = github_api_request("GET", "evaluation_taches_spring.csv")
+        if test_response and test_response.status_code == 200:
+            github_available = True
+            st.success("🌐 Connecté au Cloud GitHub")
+    except:
+        pass
+    
+    if not github_available:
+        st.info("💻 Mode développement local - Les données ne seront pas persistantes")
     
     # Section de rafraîchissement automatique
     with st.sidebar:
