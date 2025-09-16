@@ -108,22 +108,25 @@ def load_from_github(filename):
         return {}  # Dictionnaire pour votes et users
 
 def save_to_github(filename, data):
-    """Sauvegarde un fichier sur GitHub (silencieux)"""
+    """Sauvegarde un fichier sur GitHub (silencieux) - crée le fichier s'il n'existe pas"""
     try:
         # Récupérer le SHA du fichier existant
         response = github_api_request("GET", filename)
-        sha = response.json().get("sha") if response and response.status_code == 200 else None
+        sha = None
+        if response and response.status_code == 200:
+            sha = response.json().get("sha")
         
         # Préparer les données
         content = base64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')).decode('utf-8')
         
         github_branch = st.secrets.get("github_branch", "main")
         payload = {
-            "message": f"Update {filename} - {datetime.now().isoformat()}",
+            "message": f"Auto-update {filename} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "content": content,
             "branch": github_branch
         }
         
+        # Ajouter le SHA seulement si le fichier existe déjà
         if sha:
             payload["sha"] = sha
         
@@ -133,8 +136,34 @@ def save_to_github(filename, data):
         # Silencieux - pas d'affichage d'erreur à l'utilisateur
         return False
 
+def initialize_github_files():
+    """Initialise les fichiers GitHub s'ils n'existent pas (silencieux)"""
+    if not st.secrets.get("use_github", False):
+        return
+    
+    try:
+        # Fichiers à créer avec leurs structures par défaut
+        files_to_init = {
+            "votes_spring_meeting.json": {},
+            "users_spring_meeting.json": {},
+            "tasks_spring_meeting.json": []
+        }
+        
+        for filename, default_data in files_to_init.items():
+            # Vérifier si le fichier existe
+            response = github_api_request("GET", filename)
+            if not response or response.status_code == 404:
+                # Le fichier n'existe pas, le créer
+                save_to_github(filename, default_data)
+    except:
+        # Silencieux - si ça ne marche pas, on continue en mode local
+        pass
+
 def load_data():
     """Charge les données de votes, utilisateurs et tâches"""
+    # Initialiser les fichiers GitHub si nécessaire
+    initialize_github_files()
+    
     if st.secrets.get("use_github", False):
         votes = load_from_github("votes_spring_meeting.json")
         users = load_from_github("users_spring_meeting.json") 
@@ -164,12 +193,21 @@ def load_data():
     return votes, users, additional_tasks
 
 def save_data(votes, users, additional_tasks):
-    """Sauvegarde toutes les données (silencieux)"""
+    """Sauvegarde toutes les données (silencieux avec feedback discret)"""
+    success_count = 0
+    
     if st.secrets.get("use_github", False):
         # Tentative de sauvegarde GitHub en arrière-plan, silencieuse
-        save_to_github("votes_spring_meeting.json", votes)
-        save_to_github("users_spring_meeting.json", users)
-        save_to_github("tasks_spring_meeting.json", additional_tasks)
+        if save_to_github("votes_spring_meeting.json", votes):
+            success_count += 1
+        if save_to_github("users_spring_meeting.json", users):
+            success_count += 1
+        if save_to_github("tasks_spring_meeting.json", additional_tasks):
+            success_count += 1
+        
+        # Stocker le statut dans session_state pour affichage discret
+        st.session_state.last_save_status = f"GitHub: {success_count}/3 fichiers sauvés"
+        st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
     else:
         # Sauvegarde locale en fallback
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -184,9 +222,13 @@ def save_data(votes, users, additional_tasks):
                 
                 with open(filename, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
+                success_count += 1
             except:
                 # Silencieux même en local
                 pass
+        
+        st.session_state.last_save_status = f"Local: {success_count}/3 fichiers sauvés"
+        st.session_state.last_save_time = datetime.now().strftime("%H:%M:%S")
 
 def get_user_tokens(user_id, users):
     """Récupère les tokens restants pour un utilisateur"""
@@ -325,6 +367,10 @@ def main():
         # Affichage de l'heure actuelle
         current_time = datetime.now().strftime("%H:%M:%S")
         st.info(f"⏰ Dernière actualisation : {current_time}")
+        
+        # Affichage discret du statut de sauvegarde
+        if hasattr(st.session_state, 'last_save_status'):
+            st.caption(f"💾 {st.session_state.last_save_status} à {st.session_state.last_save_time}")
         
         # Auto-refresh avec timer JavaScript (non-bloquant)
         st.markdown("""
