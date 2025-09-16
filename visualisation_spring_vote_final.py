@@ -8,7 +8,6 @@ from datetime import datetime
 import uuid
 import requests
 import base64
-import time
 
 # Configuration de la page
 st.set_page_config(
@@ -312,40 +311,25 @@ def main():
     # Section de rafraîchissement automatique
     with st.sidebar:
         st.markdown("---")
-        st.subheader("🔄 Rafraîchissement Automatique")
+        st.subheader("🔄 Rafraîchissement")
         
         # Bouton de rafraîchissement manuel
         if st.button("🔄 Actualiser maintenant"):
             st.cache_data.clear()
             st.rerun()
         
-        # Option de rafraîchissement automatique
-        auto_refresh = st.checkbox("🔄 Rafraîchissement automatique (30s)", value=True)
+        # Affichage de l'heure actuelle
+        current_time = datetime.now().strftime("%H:%M:%S")
+        st.info(f"⏰ Dernière actualisation : {current_time}")
         
-        if auto_refresh:
-            # Placeholder pour le décompte
-            countdown_placeholder = st.empty()
-            
-            # Initialiser le timestamp de dernière actualisation
-            if 'last_refresh' not in st.session_state:
-                st.session_state.last_refresh = time.time()
-            
-            # Calculer le temps écoulé
-            time_elapsed = time.time() - st.session_state.last_refresh
-            time_remaining = max(0, 30 - time_elapsed)
-            
-            # Afficher le décompte
-            countdown_placeholder.write(f"⏰ Prochaine actualisation : {int(time_remaining)}s")
-            
-            # Auto-refresh toutes les 30 secondes
-            if time_elapsed >= 30:
-                st.session_state.last_refresh = time.time()
-                st.cache_data.clear()
-                st.rerun()
-            else:
-                # Attendre 1 seconde et rafraîchir l'affichage
-                time.sleep(1)
-                st.rerun()
+        # Auto-refresh avec timer JavaScript (non-bloquant)
+        st.markdown("""
+        <script>
+        setTimeout(function(){
+            window.location.reload();
+        }, 60000);
+        </script>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -357,34 +341,21 @@ def main():
         st.error("❌ Impossible de charger les données CSV. Vérifiez la configuration.")
         return
     
-    # Affichage du timestamp de dernière mise à jour
-    current_time = datetime.now().strftime("%H:%M:%S")
-    st.info(f"📊 Données mises à jour à {current_time} - {len(additional_tasks)} nouvelles tâches")
+    # Affichage des statistiques
+    st.info(f"📊 {len(additional_tasks)} nouvelles tâches proposées")
     
     # Obtenir toutes les tâches (CSV + nouvelles)
     all_tasks = get_all_tasks(df, additional_tasks)
     
-    # Détecter les nouvelles tâches ajoutées récemment (dernières 5 minutes)
+    # Affichage des nouvelles tâches récentes (simplifié)
     if additional_tasks:
-        recent_tasks = []
-        current_time = datetime.now()
-        for task in additional_tasks:
-            task_time = datetime.fromisoformat(task['timestamp'])
-            time_diff = (current_time - task_time).total_seconds()
-            if time_diff <= 300:  # 5 minutes
-                recent_tasks.append(task)
-        
+        recent_tasks = additional_tasks[-3:]  # 3 dernières tâches
         if recent_tasks:
             with st.sidebar:
                 st.markdown("---")
                 st.subheader("🆕 Nouvelles tâches récentes")
-                for task in recent_tasks[-3:]:  # Afficher les 3 dernières
-                    time_diff = (current_time - datetime.fromisoformat(task['timestamp'])).total_seconds()
-                    if time_diff < 60:
-                        time_str = f"{int(time_diff)}s"
-                    else:
-                        time_str = f"{int(time_diff/60)}min"
-                    st.success(f"🆕 **{task['name']}**\npar {task['proposed_by']} il y a {time_str}")
+                for task in recent_tasks:
+                    st.success(f"🆕 **{task['name']}** par {task['proposed_by']}")
     
     # Sidebar pour le système de vote
     with st.sidebar:
