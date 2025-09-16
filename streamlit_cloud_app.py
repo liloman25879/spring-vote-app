@@ -187,6 +187,98 @@ def save_data_local(votes, users, additional_tasks):
         st.error(f"Erreur sauvegarde locale: {str(e)}")
         return False
 
+# ---- Utilitaires clés Firebase et opérations granulaires ----
+def sanitize_key(key: str) -> str:
+    """Sanitize a string to be a valid Firebase RTDB key by replacing forbidden characters.
+    Forbidden: '.', '#', '$', '[', ']', '/', '\\'"""
+    if not isinstance(key, str):
+        key = str(key)
+    forbidden = ['.', '#', '$', '[', ']', '/', '\\']
+    for ch in forbidden:
+        key = key.replace(ch, '_')
+    return key.strip()
+
+def task_key_from_task(task: dict) -> str:
+    """Get a stable Firebase key for a task using its id if present, else its name, sanitized."""
+    base = task.get('id') or task.get('name') or 'unknown_task'
+    return sanitize_key(base)
+
+def ensure_user_record(firebase_ref, user_id: str, user_name: str):
+    """Ensure a user record with tokens exists in Firebase. Do nothing in local mode."""
+    try:
+        if firebase_ref is None:
+            return
+        user_ref = firebase_ref.child('users').child(user_id)
+        data = user_ref.get()
+        if not data:
+            user_ref.set({
+                'name': user_name,
+                'tokens': TOKENS_CONFIG.copy(),
+                'created_at': datetime.now().isoformat()
+            })
+        else:
+            # Keep name up to date
+            if data.get('name') != user_name:
+                user_ref.child('name').set(user_name)
+    except Exception as e:
+        st.warning(f"Impossible de vérifier/initialiser l'utilisateur dans le cloud: {e}")
+
+def decrement_token(firebase_ref, user_id: str, vote_type: str) -> bool:
+    """Decrement a user's token counter in Firebase safely. Returns True if decremented."""
+    try:
+        if firebase_ref is None:
+            return True  # local mode handled elsewhere
+        tok_ref = firebase_ref.child('users').child(user_id).child('tokens').child(vote_type)
+
+        # Transaction-like decrement
+        def _txn(cur):
+            try:
+                val = int(cur) if cur is not None else 0
+            except Exception:
+                val = 0
+            if val > 0:
+                return val - 1
+            return val
+
+        new_val = tok_ref.transaction(_txn)
+        # If token was 0, it remains 0 -> not decremented
+        try:
+            return int(new_val) >= 0 and int(new_val) != int((tok_ref.get() or 0) + 1)
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+def record_vote(firebase_ref, task_key: str, user_id: str, user_name: str, vote_value: int) -> bool:
+    """Record a vote in Firebase under votes/{task_key}/{user_id}/pushId and update last_updated."""
+    try:
+        if firebase_ref is None:
+            return False
+        vote_obj = {
+            'score': vote_value,
+            'timestamp': datetime.now().isoformat(),
+            'user_name': user_name
+        }
+        firebase_ref.child('votes').child(task_key).child(user_id).push(vote_obj)
+        firebase_ref.child('last_updated').set(datetime.now().isoformat())
+        return True
+    except Exception as e:
+        st.error(f"Erreur d'enregistrement du vote (cloud): {e}")
+        return False
+
+def add_additional_task(firebase_ref, task: dict) -> bool:
+    """Add a new task in Firebase under additional_tasks/{id} and update last_updated."""
+    try:
+        if firebase_ref is None:
+            return False
+        tid = task.get('id') or str(uuid.uuid4())
+        firebase_ref.child('additional_tasks').child(sanitize_key(tid)).set(task)
+        firebase_ref.child('last_updated').set(datetime.now().isoformat())
+        return True
+    except Exception as e:
+        st.error(f"Erreur d'ajout de tâche (cloud): {e}")
+        return False
+
 def get_user_tokens(user_id, users):
     """Récupère les tokens restants pour un utilisateur"""
     if user_id not in users:
@@ -274,9 +366,14 @@ def load_live_data(firebase_ref):
         # Charger directement depuis Firebase sans cache
         data = firebase_ref.get() or {}
         
-        votes = data.get('votes', {})
+        votes = data.get('votes', {})  # votes par task_key -> user_id -> pushId -> vote
         users = data.get('users', {})
-        additional_tasks = data.get('additional_tasks', [])
+        # additional_tasks peut être dict (par id) ou liste
+        additional_tasks_raw = data.get('additional_tasks', {})
+        if isinstance(additional_tasks_raw, dict):
+            additional_tasks = list(additional_tasks_raw.values())
+        else:
+            additional_tasks = additional_tasks_raw or []
         last_updated = data.get('last_updated', '')
         
         return votes, users, additional_tasks, last_updated
@@ -394,7 +491,7 @@ def main():
             st.rerun()
     
     with col2:
-        live_mode = st.checkbox("🔴 Live", value=True, help="Synchronisation temps réel")
+        live_mode = st.checkbox("Auto-rafraîchissement (beta)", value=False, help="Active le rafraîchissement automatique toutes les 5s (peut perturber les formulaires)")
     
     # Mécanisme de polling intelligent
     if live_mode and firebase_ref is not None:
@@ -487,6 +584,11 @@ def main():
         if st.session_state.user_name:
             user_name = st.session_state.user_name  # Utiliser le nom de session_state
             user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_name))
+            # S'assurer que l'utilisateur existe dans le cloud et le cache
+            try:
+                ensure_user_record(firebase_ref, user_id, user_name)
+            except Exception:
+                pass
             user_tokens = get_user_tokens(user_id, users)
             users[user_id]["name"] = user_name
             
@@ -583,30 +685,54 @@ def main():
                     if remaining > 0:
                         if st.button(f"{stars}\n({remaining})", key=f"vote_{vote_value}_{current_task['name']}", use_container_width=True):
                             # Enregistrer le vote
-                            if current_task['name'] not in votes:
-                                votes[current_task['name']] = {}
-                            if user_id not in votes[current_task['name']]:
-                                votes[current_task['name']][user_id] = []
-                            
-                            votes[current_task['name']][user_id].append({
-                                "score": vote_value,
-                                "timestamp": datetime.now().isoformat(),
-                                "user_name": user_name
-                            })
-                            
-                            # Décrémenter le token
-                            users[user_id]["tokens"][vote_type] -= 1
-                            
-                            # Sauvegarder dans le cloud
-                            if save_data_firebase(firebase_ref, votes, users, additional_tasks):
-                                st.success(f"Vote enregistré : {vote_value}/5")
-                                # Mettre à jour les données locales immédiatement
-                                st.session_state.votes_data = votes
-                                st.session_state.users_data = users
-                                time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
-                                st.rerun()
+                            task_key = task_key_from_task(current_task)
+                            # Cloud mode
+                            if firebase_ref is not None:
+                                # Vérifier token distant, décrémenter, puis enregistrer le vote
+                                ok = decrement_token(firebase_ref, user_id, vote_type)
+                                if not ok:
+                                    st.error("Plus de tokens disponibles pour ce type de vote (cloud)")
+                                else:
+                                    if record_vote(firebase_ref, task_key, user_id, user_name, vote_value):
+                                        # Mettre à jour le cache local pour réactivité immédiate
+                                        if task_key not in votes:
+                                            votes[task_key] = {}
+                                        if user_id not in votes[task_key]:
+                                            votes[task_key][user_id] = []
+                                        votes[task_key][user_id].append({
+                                            "score": vote_value,
+                                            "timestamp": datetime.now().isoformat(),
+                                            "user_name": user_name
+                                        })
+                                        users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
+                                        st.session_state.votes_data = votes
+                                        st.session_state.users_data = users
+                                        st.success(f"Vote enregistré : {vote_value}/5")
+                                        time.sleep(0.3)
+                                        st.rerun()
+                                    else:
+                                        st.error("Erreur lors de l'enregistrement du vote (cloud)")
                             else:
-                                st.error("Erreur lors de l'enregistrement du vote")
+                                # Mode local (fallback)
+                                name_key = sanitize_key(current_task['name'])
+                                if name_key not in votes:
+                                    votes[name_key] = {}
+                                if user_id not in votes[name_key]:
+                                    votes[name_key][user_id] = []
+                                votes[name_key][user_id].append({
+                                    "score": vote_value,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "user_name": user_name
+                                })
+                                users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
+                                if save_data_local(votes, users, additional_tasks):
+                                    st.session_state.votes_data = votes
+                                    st.session_state.users_data = users
+                                    st.success(f"Vote enregistré : {vote_value}/5 (local)")
+                                    time.sleep(0.3)
+                                    st.rerun()
+                                else:
+                                    st.error("Erreur lors de l'enregistrement du vote (local)")
                     else:
                         st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{current_task['name']}", use_container_width=True)
         
@@ -646,17 +772,25 @@ def main():
                         "timestamp": datetime.now().isoformat()
                     }
                     
-                    additional_tasks.append(new_task)
-                    
-                    # Sauvegarder dans le cloud
-                    if save_data_firebase(firebase_ref, votes, users, additional_tasks):
-                        st.success(f"Nouvelle tâche proposée : '{new_task_name}'")
-                        # Mettre à jour les données locales immédiatement
-                        st.session_state.additional_tasks_data = additional_tasks
-                        time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
-                        st.rerun()
+                    # Sauvegarder dans le cloud ou local
+                    if firebase_ref is not None:
+                        if add_additional_task(firebase_ref, new_task):
+                            additional_tasks.append(new_task)
+                            st.session_state.additional_tasks_data = additional_tasks
+                            st.success(f"Nouvelle tâche proposée : '{new_task_name}'")
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.error("Erreur lors de l'ajout de la tâche (cloud)")
                     else:
-                        st.error("Erreur lors de l'ajout de la tâche")
+                        additional_tasks.append(new_task)
+                        if save_data_local(votes, users, additional_tasks):
+                            st.session_state.additional_tasks_data = additional_tasks
+                            st.success(f"Nouvelle tâche proposée : '{new_task_name}' (local)")
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.error("Erreur lors de l'ajout de la tâche (local)")
         else:
             # Message pour les utilisateurs non connectés
             st.info("👆 Connectez-vous pour proposer de nouvelles tâches")
