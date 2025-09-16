@@ -279,6 +279,56 @@ def add_additional_task(firebase_ref, task: dict) -> bool:
         st.error(f"Erreur d'ajout de tâche (cloud): {e}")
         return False
 
+def _flatten_user_votes(user_votes) -> list:
+    """Return a list of vote objects from either a list or a dict of pushIds."""
+    if isinstance(user_votes, list):
+        return user_votes
+    if isinstance(user_votes, dict):
+        # values may be vote objects
+        return list(user_votes.values())
+    return []
+
+def collect_votes_for_task(votes_store: dict, task: dict) -> list:
+    """Collect all vote objects for a given task across possible keys (id-based, sanitized name, raw name)."""
+    keys = set()
+    try:
+        keys.add(task_key_from_task(task))
+    except Exception:
+        pass
+    try:
+        if 'name' in task:
+            keys.add(sanitize_key(task['name']))
+            keys.add(task['name'])
+    except Exception:
+        pass
+    all_votes = []
+    for k in keys:
+        if k and k in votes_store:
+            for uv in votes_store[k].values():
+                all_votes.extend(_flatten_user_votes(uv))
+    return all_votes
+
+def collect_user_votes_for_task(votes_store: dict, task: dict, user_id: str) -> list:
+    """Collect votes for a given task filtered by a specific user_id across possible keys."""
+    keys = set()
+    try:
+        keys.add(task_key_from_task(task))
+    except Exception:
+        pass
+    try:
+        if 'name' in task:
+            keys.add(sanitize_key(task['name']))
+            keys.add(task['name'])
+    except Exception:
+        pass
+    all_votes = []
+    for k in keys:
+        if k and k in votes_store:
+            user_votes = votes_store[k].get(user_id)
+            if user_votes:
+                all_votes.extend(_flatten_user_votes(user_votes))
+    return all_votes
+
 def get_user_tokens(user_id, users):
     """Récupère les tokens restants pour un utilisateur"""
     if user_id not in users:
@@ -665,9 +715,7 @@ def main():
                 st.metric("Intérêt", f"{current_task['interest_score']:.1f}/5")
             
             # Vérifier les votes existants pour cette tâche
-            existing_votes = []
-            if current_task['name'] in votes and user_id in votes[current_task['name']]:
-                existing_votes = votes[current_task['name']][user_id]
+            existing_votes = collect_user_votes_for_task(votes, current_task, user_id)
             
             if existing_votes:
                 st.info(f"Vous avez déjà voté : {[v['score'] for v in existing_votes]}")
@@ -807,13 +855,10 @@ def main():
         for task in all_tasks:
             # Calculer le score d'intérêt avec les votes
             interest_score = task['interest_score']
-            if task['name'] in votes:
-                all_votes = []
-                for user_votes in votes[task['name']].values():
-                    all_votes.extend([v["score"] for v in user_votes])
-                
-                if all_votes:
-                    interest_score = sum(all_votes) / len(all_votes)
+            task_votes_objs = collect_votes_for_task(votes, task)
+            scores = [v.get("score") for v in task_votes_objs if isinstance(v, dict) and "score" in v]
+            if scores:
+                interest_score = sum(scores) / len(scores)
             
             combined_data.append({
                 'Nouveau_Nom': task['name'],
@@ -865,10 +910,7 @@ def main():
             formatted_desc = format_text_for_hover(description)
             
             # Compter les votes
-            vote_count = 0
-            if task_name in votes:
-                for user_votes in votes[task_name].values():
-                    vote_count += len(user_votes)
+            vote_count = len(collect_votes_for_task(votes, {"name": task_name, "id": row.get('Task_ID')}))
             
             # Badge pour les nouvelles tâches
             source_badge = "🆕 NOUVELLE" if row['Source'] == 'proposed' else "📋 ORIGINALE"
@@ -911,7 +953,11 @@ def main():
         st.subheader("📊 Statistiques de Vote")
         
         # Statistiques générales
-        total_votes = sum(len(task_votes) for task_votes in votes.values() for task_votes in task_votes.values())
+        # Total votes across both legacy (lists) and new (dict pushIds) representations
+        total_votes = 0
+        for task_map in votes.values():
+            for uv in task_map.values():
+                total_votes += len(_flatten_user_votes(uv))
         st.metric("Total des votes", total_votes)
         st.metric("Participants", len(users))
         st.metric("Nouvelles tâches proposées", len(additional_tasks))
@@ -925,11 +971,13 @@ def main():
         if votes:
             st.subheader("🏆 Top des tâches")
             task_vote_counts = {}
-            for task_name, task_votes in votes.items():
-                count = sum(len(user_votes) for user_votes in task_votes.values())
+            # Repasser par all_tasks pour avoir un mapping stable nom<->clé
+            for task in all_tasks:
+                tv = collect_votes_for_task(votes, task)
+                count = len(tv)
                 if count > 0:
-                    avg_score = sum(vote["score"] for user_votes in task_votes.values() for vote in user_votes) / count
-                    task_vote_counts[task_name] = {"count": count, "avg_score": avg_score}
+                    avg_score = sum(v.get("score", 0) for v in tv if isinstance(v, dict)) / count
+                    task_vote_counts[task['name']] = {"count": count, "avg_score": avg_score}
             
             # Trier par nombre de votes puis par score moyen
             sorted_tasks = sorted(task_vote_counts.items(), 
