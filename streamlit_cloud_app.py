@@ -619,44 +619,44 @@ def main():
         # Section pour ajouter une nouvelle tâche - visible seulement si connecté
         if st.session_state.user_name:
             st.subheader("➕ Proposer une nouvelle tâche")
-        
-        with st.form("new_task_form"):
-            new_task_name = st.text_input("Nom de la tâche :")
-            new_task_desc = st.text_area("Description détaillée :")
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                new_cost = st.slider("Coût", 1, 5, 3)
-            with col2:
-                new_complexity = st.slider("Complexité", 1, 5, 3)
-            with col3:
-                new_interest = st.slider("Intérêt", 1, 5, 3)
-            
-            submitted = st.form_submit_button("🚀 Proposer la tâche")
-            
-            if submitted and new_task_name and new_task_desc and st.session_state.user_name:
-                new_task = {
-                    "id": str(uuid.uuid4()),
-                    "name": new_task_name,
-                    "description": new_task_desc,
-                    "cost": new_cost,
-                    "complexity": new_complexity,
-                    "interest": new_interest,
-                    "proposed_by": st.session_state.user_name,
-                    "timestamp": datetime.now().isoformat()
-                }
+            with st.form("new_task_form"):
+                new_task_name = st.text_input("Nom de la tâche :")
+                new_task_desc = st.text_area("Description détaillée :")
                 
-                additional_tasks.append(new_task)
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    new_cost = st.slider("Coût", 1, 5, 3)
+                with col2:
+                    new_complexity = st.slider("Complexité", 1, 5, 3)
+                with col3:
+                    new_interest = st.slider("Intérêt", 1, 5, 3)
                 
-                # Sauvegarder dans le cloud
-                if save_data_firebase(firebase_ref, votes, users, additional_tasks):
-                    st.success(f"Nouvelle tâche proposée : '{new_task_name}'")
-                    # Mettre à jour les données locales immédiatement
-                    st.session_state.additional_tasks_data = additional_tasks
-                    time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
-                    st.rerun()
-                else:
-                    st.error("Erreur lors de l'ajout de la tâche")
+                submitted = st.form_submit_button("🚀 Proposer la tâche")
+                
+                if submitted and new_task_name and new_task_desc and st.session_state.user_name:
+                    new_task = {
+                        "id": str(uuid.uuid4()),
+                        "name": new_task_name,
+                        "description": new_task_desc,
+                        "cost": new_cost,
+                        "complexity": new_complexity,
+                        "interest": new_interest,
+                        "proposed_by": st.session_state.user_name,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    additional_tasks.append(new_task)
+                    
+                    # Sauvegarder dans le cloud
+                    if save_data_firebase(firebase_ref, votes, users, additional_tasks):
+                        st.success(f"Nouvelle tâche proposée : '{new_task_name}'")
+                        # Mettre à jour les données locales immédiatement
+                        st.session_state.additional_tasks_data = additional_tasks
+                        time.sleep(0.5)  # Petit délai pour laisser Firebase se synchroniser
+                        st.rerun()
+                    else:
+                        st.error("Erreur lors de l'ajout de la tâche")
         else:
             # Message pour les utilisateurs non connectés
             st.info("👆 Connectez-vous pour proposer de nouvelles tâches")
