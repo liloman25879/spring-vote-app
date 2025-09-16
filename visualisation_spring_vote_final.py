@@ -63,14 +63,13 @@ TOKENS_CONFIG = {
 }
 
 def github_api_request(method, endpoint, data=None):
-    """Effectue une requête à l'API GitHub"""
+    """Effectue une requête à l'API GitHub (silencieux)"""
     try:
         github_owner = st.secrets.get("github_owner", "")
         github_repo = st.secrets.get("github_repo", "")
         github_token = st.secrets.get("github_token", "")
         
         if not all([github_owner, github_repo, github_token]):
-            st.error("Configuration GitHub incomplète dans les secrets")
             return None
             
         url = f"https://api.github.com/repos/{github_owner}/{github_repo}/contents/{endpoint}"
@@ -86,11 +85,11 @@ def github_api_request(method, endpoint, data=None):
         
         return response
     except Exception as e:
-        st.error(f"Erreur API GitHub : {e}")
+        # Silencieux - pas d'affichage d'erreur à l'utilisateur
         return None
 
 def load_from_github(filename):
-    """Charge un fichier depuis GitHub"""
+    """Charge un fichier depuis GitHub (silencieux)"""
     try:
         response = github_api_request("GET", filename)
         if response and response.status_code == 200:
@@ -102,14 +101,14 @@ def load_from_github(filename):
             return []  # Liste pour les tâches
         return {}  # Dictionnaire pour votes et users
     except Exception as e:
-        st.error(f"Erreur chargement {filename} : {e}")
+        # Silencieux - pas d'affichage d'erreur à l'utilisateur
         # Retourner le bon type par défaut selon le fichier
         if "tasks" in filename:
             return []  # Liste pour les tâches
         return {}  # Dictionnaire pour votes et users
 
 def save_to_github(filename, data):
-    """Sauvegarde un fichier sur GitHub"""
+    """Sauvegarde un fichier sur GitHub (silencieux)"""
     try:
         # Récupérer le SHA du fichier existant
         response = github_api_request("GET", filename)
@@ -131,7 +130,7 @@ def save_to_github(filename, data):
         response = github_api_request("PUT", filename, payload)
         return response and response.status_code in [200, 201]
     except Exception as e:
-        st.error(f"Erreur sauvegarde {filename} : {e}")
+        # Silencieux - pas d'affichage d'erreur à l'utilisateur
         return False
 
 def load_data():
@@ -165,13 +164,14 @@ def load_data():
     return votes, users, additional_tasks
 
 def save_data(votes, users, additional_tasks):
-    """Sauvegarde toutes les données"""
+    """Sauvegarde toutes les données (silencieux)"""
     if st.secrets.get("use_github", False):
+        # Tentative de sauvegarde GitHub en arrière-plan, silencieuse
         save_to_github("votes_spring_meeting.json", votes)
         save_to_github("users_spring_meeting.json", users)
         save_to_github("tasks_spring_meeting.json", additional_tasks)
     else:
-        # Sauvegarde locale
+        # Sauvegarde locale en fallback
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         for filename, data in [("votes_spring_meeting.json", votes), 
@@ -185,6 +185,7 @@ def save_data(votes, users, additional_tasks):
                 with open(filename, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except:
+                # Silencieux même en local
                 pass
 
 def get_user_tokens(user_id, users):
@@ -249,9 +250,6 @@ def load_csv_data():
         csv_url = "https://raw.githubusercontent.com/liloman25879/spring-vote-app/main/evaluation_taches_spring.csv"
         df = pd.read_csv(csv_url, sep=';', encoding='iso-8859-1')
         
-        # Debug : afficher les colonnes pour vérification
-        st.success(f"✅ CSV chargé : {len(df)} tâches")
-        
         # Nettoyer les données numériques (gestion robuste des virgules)
         numeric_cols = ['Cout', 'Score_Prix', 'Score_Complexite', 'Score_Interet', 'Score_Total']
         for col in numeric_cols:
@@ -302,11 +300,17 @@ def get_all_tasks(df, additional_tasks):
 def main():
     st.title("🗳️ SPRING - Vote Collaboratif Cloud")
     
-    # Vérification de la configuration
-    if st.secrets.get("use_github", False):
-        st.success("🌐 Mode Cloud activé - Données synchronisées")
+    # Vérification discrète de la configuration
+    github_enabled = st.secrets.get("use_github", False)
+    if github_enabled:
+        # Test silencieux de la connexion GitHub
+        test_response = github_api_request("GET", "evaluation_taches_spring.csv")
+        if test_response and test_response.status_code == 200:
+            st.success("🌐 Mode Cloud activé")
+        else:
+            st.info("💻 Mode Local actif")
     else:
-        st.info("💻 Mode Local - Ajoutez les secrets pour le mode cloud")
+        st.info("💻 Mode Local - Données en mémoire")
     
     # Section de rafraîchissement automatique
     with st.sidebar:
