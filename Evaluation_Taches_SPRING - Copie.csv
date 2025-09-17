@@ -18,7 +18,7 @@ Tester la bande de température de Victor;Évaluation bande de température spé
 Nouveaux systèmes de filtration nanoparticule;Cyclones haute vitesse, filtration électrostatique, banc de test PAL, pot à carbone. Comparaison BF310 : rendement, granulométrie, perte de charge.;3;3;3;4;5;4;5;5;5;5;3;3,8;5;3,933333333;Filtration nanoparticules (test filtres, électro-chaleur)
 Battre des records de durée;Savoir comportement en fonctionnement continu, fin de campagne, 100% opérationnel.;4;5;4;5;5;5;2;;4;2;4;4,8;2,666666667;3,822222222;Battre des records de durée (commercial) [24 h ?]
 Caractériser impuretés dans le gaz a différentes étapes process;Prélèvement gaz chaud/froid, gérer ATEX, analyse particules, détection structures inattendues, coordination labos externes.;3;3;3;4;5;4;5;4;;5;3;3,8;4,666666667;3,822222222;Caractériser les impuretés dans la phase gaz
-Miscibilité CH4 – H2;Étudier selon écoulement et température.;3;4;3;3;4;4;5;4;5;5;3;3,6;4,75;3,783333333;Miscibilité CH?–H? (?, ?, %…)
+Miscibilité CH4 vs H2;Étudier selon écoulement et température.;3;4;3;3;4;4;5;4;5;5;3;3,6;4,75;3,783333333;Miscibilité CH?–H? (?, ?, %…)
 Tester les impuretés du feedstock;Vapeur d'eau, éthane, mercaptans, CO2, N2, H2. Impact électrode, détection pont carbone, régulation générale, structure carbone plasmalyse.;3;3;2;4;5;4;5;4;;5;3;3,6;4,666666667;3,755555556;Caractériser les impuretés dans la phase gaz
 Étanchéification presse étoupe des résistances du convertisseur;Capot pressurisé azote, presse étoupe pour câbles, aide au bilan matière, ATEX zone 1.;3;3;3;3;5;4;5;5;5;2;3;3,6;4,25;3,616666667;Étanchéification des résistances
 Combustion des gaz de CH5;Designer et opérer torchère CH5, impacts sécurité, améliorer performance environnementale, tester résidu carbone.;3;3;3;4;4;5;5;;4;3;3;3,8;4;3,6;Combustion H?–CH? (brûleur…)
@@ -31,4 +31,5 @@ Séparation / purification du dihydrogène;Identifier membrane basse pression.;2
 Séparer l'acétylène en sortie de plasma;Évaluation faisabilité et contraintes.;2;2;2;1;2;2;3;;4;3;2;1,8;3,333333333;2,377777778;Séparation (C?H? en sortie plasma)
 Nettoyage du convertisseur vapeur/CO2;Injection vapeur amont four, intérêt SPRING, attention choc thermique, impact carbone.;1;2;2;3;3;3;3;2;5;4;1;2,6;3,5;2,366666667;Nettoyage à la vapeur
 Injection directe de plasma dans le four;Attention chicanes, utiliser TT, cellule plasma extérieure (électricité, gaz).;1;1;2;2;2;3;1;2;2;5;1;2;2,5;1,833333333;Injection directe de plasma dans le four
+
 
