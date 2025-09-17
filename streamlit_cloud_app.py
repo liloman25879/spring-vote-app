@@ -206,22 +206,30 @@ def record_vote(firebase_ref, task_key: str, user_id: str, user_name: str, vote_
         
         user_votes_ref = firebase_ref.child('votes').child(task_key).child(user_id)
 
-        # Si un vote précédent existe, le supprimer
-        if previous_vote and 'vote_id' in previous_vote:
-            user_votes_ref.child(previous_vote['vote_id']).set(None)
+        # Si un vote précédent existe, le supprimer de manière robuste
+        if previous_vote:
+            # Récupérer tous les votes de l'utilisateur pour cette tâche pour trouver la clé à supprimer
+            existing_votes_snapshot = user_votes_ref.get()
+            if isinstance(existing_votes_snapshot, dict):
+                # Prendre la première clé de vote trouvée (il ne devrait y en avoir qu'une)
+                vote_id_to_delete = next(iter(existing_votes_snapshot), None)
+                if vote_id_to_delete:
+                    user_votes_ref.child(vote_id_to_delete).set(None)
 
+        # Pousser le nouveau vote
         vote_obj = {
             'score': vote_value,
             'timestamp': datetime.now().isoformat(),
             'user_name': user_name
         }
         user_votes_ref.push(vote_obj)
+        
         firebase_ref.child('last_updated').set(datetime.now().isoformat())
         return True
     except Exception as e:
         st.error(f"Erreur d'enregistrement du vote (cloud): {e}")
         return False
-
+        
 def add_additional_task(firebase_ref, task: dict) -> bool:
     """Add a new task in Firebase under additional_tasks/{id} and update last_updated."""
     try:
