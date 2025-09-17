@@ -905,7 +905,7 @@ def main():
 
         # Trier par total d'étoiles, puis par nombre de votes
         df_ranked = pd.DataFrame(task_scores)
-        df_ranked = df_ranked.sort_values(by=['total_stars', 'num_votes'], ascending=False).reset_index()
+        df_ranked = df_ranked.sort_values(by=['num_votes'], ascending=False).reset_index()
 
         # Afficher le classement
         for index, row in df_ranked.iterrows():
