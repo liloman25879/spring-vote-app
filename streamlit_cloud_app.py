@@ -55,13 +55,13 @@ DESCRIPTIONS_REELLES = {
     "Injection directe de plasma dans le four": "Attention aux chicanes -> utiliser un TT. Mise en place d'une cellule plasma en extérieur (électricité, du gaz)."
 }
 
-# Configuration des tokens de vote par utilisateur
+# Configuration des tokens de vote par utilisateur (réduits)
 TOKENS_CONFIG = {
-    "votes_5": 5,  # 3 votes à 5/5
-    "votes_4": 10,  # 5 votes à 4/5
-    "votes_3": 15,  # 10 votes à 3/5
-    "votes_2": 20,  # 15 votes à 2/5
-    "votes_1": 20   # 20 votes à 1/5
+    "votes_5": 3,  # 2 votes à 5/5
+    "votes_4": 5,  # 4 votes à 4/5  
+    "votes_3": 8, # 8 votes à 3/5
+    "votes_2": 10, # 10 votes à 2/5
+    "votes_1": 10  # 10 votes à 1/5
 }
 
 @st.cache_resource
@@ -211,17 +211,47 @@ def decrement_token(firebase_ref, user_id: str, vote_type: str) -> bool:
     except Exception:
         return False
 
-def record_vote(firebase_ref, task_key: str, user_id: str, user_name: str, vote_value: int) -> bool:
-    """Record a vote in Firebase under votes/{task_key}/{user_id}/pushId and update last_updated."""
+def increment_token(firebase_ref, user_id: str, vote_type: str) -> bool:
+    """Increment a user's token counter in Firebase safely."""
+    try:
+        if firebase_ref is None:
+            return True  # local mode
+        tok_ref = firebase_ref.child('users').child(user_id).child('tokens').child(vote_type)
+
+        def _txn(cur):
+            try:
+                val = int(cur) if cur is not None else 0
+            except Exception:
+                val = 0
+            # Ne pas incrémenter au-delà du maximum défini
+            max_val = TOKENS_CONFIG.get(vote_type, 0)
+            if val < max_val:
+                return val + 1
+            return val
+
+        tok_ref.transaction(_txn)
+        return True
+    except Exception:
+        return False
+
+def record_vote(firebase_ref, task_key: str, user_id: str, user_name: str, vote_value: int, previous_vote: dict = None) -> bool:
+    """Record a vote, potentially removing a previous one."""
     try:
         if firebase_ref is None:
             return False
+        
+        user_votes_ref = firebase_ref.child('votes').child(task_key).child(user_id)
+
+        # Si un vote précédent existe, le supprimer
+        if previous_vote and 'vote_id' in previous_vote:
+            user_votes_ref.child(previous_vote['vote_id']).set(None)
+
         vote_obj = {
             'score': vote_value,
             'timestamp': datetime.now().isoformat(),
             'user_name': user_name
         }
-        firebase_ref.child('votes').child(task_key).child(user_id).push(vote_obj)
+        user_votes_ref.push(vote_obj)
         firebase_ref.child('last_updated').set(datetime.now().isoformat())
         return True
     except Exception as e:
@@ -246,8 +276,8 @@ def _flatten_user_votes(user_votes) -> list:
     if isinstance(user_votes, list):
         return user_votes
     if isinstance(user_votes, dict):
-        # values may be vote objects
-        return list(user_votes.values())
+        # values may be vote objects with their pushIds
+        return [{**v, 'vote_id': k} for k, v in user_votes.items()]
     return []
 
 def collect_votes_for_task(votes_store: dict, task: dict) -> list:
@@ -703,7 +733,7 @@ def main():
                 st.info(f"Vous avez déjà voté : {[v['score'] for v in existing_votes]}")
             
             # Boutons de vote
-            st.subheader("Voter :")
+            st.subheader("Voter / Corriger :")
             vote_cols = st.columns(5)
             
             for i, (vote_type, remaining) in enumerate(user_tokens.items()):
@@ -714,86 +744,81 @@ def main():
                     task_key = task_key_from_task(current_task)
                     btn_key = f"vote_{vote_value}_{task_key}"
                     btn_lock_key = f"vote:{user_id}:{task_key}:{vote_value}"
-                    disabled = remaining <= 0 or is_locked(btn_lock_key)
-                    if remaining > 0:
-                        if st.button(f"{stars}\n({remaining})", key=btn_key, use_container_width=True, disabled=disabled):
-                            # Verrouillage immédiat pour éviter le double-clic
-                            lock_now(btn_lock_key)
-                            # Enregistrer le vote
-                            task_key = task_key  # déjà calculé
-                            # Cloud mode
-                            if firebase_ref is not None:
-                                # Vérifier token distant, décrémenter, puis enregistrer le vote
-                                ok = decrement_token(firebase_ref, user_id, vote_type)
-                                if not ok:
-                                    st.error("Plus de tokens disponibles pour ce type de vote (cloud)")
-                                else:
-                                    if record_vote(firebase_ref, task_key, user_id, user_name, vote_value):
-                                        # Mettre à jour le cache local pour réactivité immédiate
-                                        if task_key not in votes:
-                                            votes[task_key] = {}
-                                        # Construire l'objet vote une seule fois
-                                        vote_obj = {
-                                            "score": vote_value,
-                                            "timestamp": datetime.now().isoformat(),
-                                            "user_name": user_name
-                                        }
-                                        # Selon la forme existante (liste legacy ou dict pushIds), mettre à jour en conséquence
-                                        if user_id not in votes[task_key]:
-                                            # Par défaut, utiliser une liste locale pour la première écriture
-                                            votes[task_key][user_id] = [vote_obj]
-                                        else:
-                                            container = votes[task_key][user_id]
-                                            if isinstance(container, list):
-                                                container.append(vote_obj)
-                                            elif isinstance(container, dict):
-                                                # Ajouter sous une clé locale simulant un pushId pour rester compatible
-                                                local_key = f"local_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
-                                                container[local_key] = vote_obj
-                                            else:
-                                                # Forme inattendue, réinitialiser proprement
-                                                votes[task_key][user_id] = [vote_obj]
-                                        users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
-                                        st.session_state.votes_data = votes
-                                        st.session_state.users_data = users
-                                        st.success(f"Vote enregistré : {vote_value}/5")
-                                        time.sleep(0.3)
-                                        st.rerun()
-                                    else:
-                                        st.error("Erreur lors de l'enregistrement du vote (cloud)")
+                    
+                    # On peut voter même si on a déjà voté (pour corriger)
+                    can_vote = remaining > 0 or existing_votes
+                    disabled = not can_vote or is_locked(btn_lock_key)
+
+                    if st.button(f"{stars}\n({remaining})", key=btn_key, use_container_width=True, disabled=disabled):
+                        lock_now(btn_lock_key)
+                        
+                        previous_vote_obj = existing_votes[0] if existing_votes else None
+                        
+                        # Si le vote est identique, ne rien faire
+                        if previous_vote_obj and previous_vote_obj['score'] == vote_value:
+                            st.toast("Vous avez déjà voté cette valeur.")
+                            st.rerun()
+
+                        # Logique de correction de vote
+                        if firebase_ref is not None:
+                            # 1. Rembourser l'ancien token si un vote existait
+                            if previous_vote_obj:
+                                old_vote_type = f"votes_{previous_vote_obj['score']}"
+                                increment_token(firebase_ref, user_id, old_vote_type)
+                                # Mettre à jour le cache local
+                                users[user_id]["tokens"][old_vote_type] += 1
+
+                            # 2. Décrémenter le nouveau token
+                            ok = decrement_token(firebase_ref, user_id, vote_type)
+                            if not ok:
+                                st.error("Plus de tokens disponibles pour ce type de vote.")
+                                # Si on a remboursé, il faut annuler le remboursement
+                                if previous_vote_obj:
+                                    decrement_token(firebase_ref, user_id, f"votes_{previous_vote_obj['score']}")
+                                st.rerun()
+                            
+                            # 3. Enregistrer le vote (supprime l'ancien et ajoute le nouveau)
+                            if record_vote(firebase_ref, task_key, user_id, user_name, vote_value, previous_vote=previous_vote_obj):
+                                # Mettre à jour le cache local pour réactivité
+                                st.session_state.votes_data, st.session_state.users_data, _, _ = load_live_data(firebase_ref)
+                                st.success(f"Vote mis à jour : {vote_value}/5")
+                                time.sleep(0.3)
+                                st.rerun()
                             else:
-                                # Mode local (fallback)
+                                st.error("Erreur lors de la mise à jour du vote.")
+
+                        else: # Mode local
+                            # Logique locale similaire
+                            if previous_vote_obj:
+                                old_vote_type = f"votes_{previous_vote_obj['score']}"
+                                users[user_id]["tokens"][old_vote_type] += 1
+                                # Supprimer l'ancien vote localement
                                 name_key = sanitize_key(current_task['name'])
-                                if name_key not in votes:
-                                    votes[name_key] = {}
-                                # Construire l'objet vote
-                                vote_obj = {
-                                    "score": vote_value,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "user_name": user_name
-                                }
-                                if user_id not in votes[name_key]:
-                                    votes[name_key][user_id] = [vote_obj]
-                                else:
-                                    container = votes[name_key][user_id]
-                                    if isinstance(container, list):
-                                        container.append(vote_obj)
-                                    elif isinstance(container, dict):
-                                        local_key = f"local_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
-                                        container[local_key] = vote_obj
-                                    else:
-                                        votes[name_key][user_id] = [vote_obj]
-                                users[user_id]["tokens"][vote_type] = max(0, users[user_id]["tokens"][vote_type] - 1)
-                                if save_data_local(votes, users, additional_tasks):
-                                    st.session_state.votes_data = votes
-                                    st.session_state.users_data = users
-                                    st.success(f"Vote enregistré : {vote_value}/5 (local)")
-                                    time.sleep(0.3)
-                                    st.rerun()
-                                else:
-                                    st.error("Erreur lors de l'enregistrement du vote (local)")
-                    else:
-                        st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{task_key}", use_container_width=True)
+                                if name_key in votes and user_id in votes[name_key]:
+                                    # Trouver et supprimer le vote
+                                    current_user_votes = _flatten_user_votes(votes[name_key][user_id])
+                                    votes[name_key][user_id] = [v for v in current_user_votes if v['score'] != previous_vote_obj['score']]
+
+                            # Décrémenter et ajouter le nouveau
+                            users[user_id]["tokens"][vote_type] -= 1
+                            name_key = sanitize_key(current_task['name'])
+                            if name_key not in votes: votes[name_key] = {}
+                            if user_id not in votes[name_key]: votes[name_key][user_id] = []
+                            
+                            new_vote = {"score": vote_value, "timestamp": datetime.now().isoformat(), "user_name": user_name}
+                            
+                            # S'assurer que c'est une liste
+                            if isinstance(votes[name_key][user_id], dict):
+                                votes[name_key][user_id] = list(votes[name_key][user_id].values())
+
+                            votes[name_key][user_id].append(new_vote)
+
+                            if save_data_local(votes, users, additional_tasks):
+                                st.session_state.votes_data = votes
+                                st.session_state.users_data = users
+                                st.success(f"Vote mis à jour : {vote_value}/5 (local)")
+                                time.sleep(0.3)
+                                st.rerun()
         
         else:
             # Message d'invitation à se connecter
@@ -860,104 +885,45 @@ def main():
     main_col1, main_col2 = st.columns([2, 1])
     
     with main_col1:
-        st.subheader("📈 Visualisation 3D des Tâches SPRING")
-        
-        # Créer un DataFrame combiné pour la visualisation
-        combined_data = []
-        tasks_by_id = {t.get('id', t['name']): t for t in all_tasks}
-        
+        st.subheader("🏆 Classement des Tâches (par total d'étoiles)")
+
+        # Calculer le score total (somme des étoiles) pour chaque tâche
+        task_scores = []
         for task in all_tasks:
-            # Calculer le score d'intérêt avec les votes
-            interest_score = task['interest_score']
-            task_votes_objs = collect_votes_for_task(votes, task)
-            scores = [v.get("score") for v in task_votes_objs if isinstance(v, dict) and "score" in v]
-            if scores:
-                interest_score = sum(scores) / len(scores)
+            task_votes = collect_votes_for_task(votes, task)
+            total_stars = sum(v.get("score", 0) for v in task_votes if isinstance(v, dict))
+            num_votes = len(task_votes)
+            avg_score = total_stars / num_votes if num_votes > 0 else 0
             
-            combined_data.append({
-                'Nouveau_Nom': task['name'],
-                'Score_Prix': task['cost_score'],
-                'Score_Complexité': task['complexity_score'],
-                'Score_Intérêt': interest_score,
-                'Score_Total': (task['cost_score'] + task['complexity_score'] + interest_score) / 3,
-                'Source': task['source'],
-                'Description': task['description'],
-                'Task_ID': task.get('id', task['name'])
+            task_scores.append({
+                'name': task['name'],
+                'total_stars': total_stars,
+                'num_votes': num_votes,
+                'avg_score': avg_score,
+                'source': task['source']
             })
-        
-        df_display = pd.DataFrame(combined_data)
-        
-        # Créer le graphique 3D avec distinction visuelle pour les nouvelles tâches
-        fig = px.scatter_3d(
-            df_display,
-            x='Score_Prix',
-            y='Score_Complexité', 
-            z='Score_Intérêt',
-            size='Score_Total',
-            color='Source',
-            color_discrete_map={'csv': 'blue', 'proposed': 'red'},
-            hover_name='Nouveau_Nom',
-            size_max=20,
-            title="Évaluation 3D des Tâches SPRING (🔵 Originales | 🔴 Nouvelles)"
-        )
-        
-        # Enrichir les informations de hover
-        hover_text = []
-        for index, row in df_display.iterrows():
-            task_name = row['Nouveau_Nom']
-            task_id = row.get('Task_ID')
-            # Rechercher par ID en priorité (évite collisions de noms)
-            original_task = tasks_by_id.get(task_id)
-            # Utiliser les vraies données de la tâche
-            if original_task:
-                description = original_task.get('description', 'Description non trouvée')
-                display_name = original_task.get('name', task_name)
-            else:
-                description = "Description non trouvée"
-                display_name = task_name
+
+        # Trier par total d'étoiles, puis par nombre de votes
+        df_ranked = pd.DataFrame(task_scores)
+        df_ranked = df_ranked.sort_values(by=['total_stars', 'num_votes'], ascending=False).reset_index()
+
+        # Afficher le classement
+        for index, row in df_ranked.iterrows():
+            emoji = "🆕" if row['source'] == 'proposed' else "📋"
+            st.markdown(f"### {index + 1}. {emoji} {row['name']}")
             
-            formatted_desc = format_text_for_hover(description)
+            cols = st.columns(3)
+            cols[0].metric("Total d'étoiles", f"⭐ {row['total_stars']}")
+            cols[1].metric("Nombre de votes", f"🗳️ {row['num_votes']}")
+            cols[2].metric("Score moyen", f"{row['avg_score']:.1f}/5")
             
-            # Compter les votes
-            vote_count = len(collect_votes_for_task(votes, {"name": task_name, "id": row.get('Task_ID')}))
+            # Barre de progression visuelle
+            if df_ranked['total_stars'].max() > 0:
+                progress_value = row['total_stars'] / df_ranked['total_stars'].max()
+                st.progress(progress_value)
             
-            # Badge pour les nouvelles tâches
-            source_badge = "🆕 NOUVELLE" if row['Source'] == 'proposed' else "📋 ORIGINALE"
-            
-            hover_info = f"""
-<b>{display_name}</b><br>
-<b>{source_badge}</b><br>
-<br>
-<b>Scores :</b><br>
-• Coût : {row['Score_Prix']:.1f}/5<br>
-• Complexité : {row['Score_Complexité']:.1f}/5<br>
-• Intérêt : {row['Score_Intérêt']:.1f}/5<br>
-• <b>Total : {row['Score_Total']:.1f}/5</b><br>
-<br>
-<b>Votes reçus : {vote_count}</b><br>
-<br>
-<b>Description :</b><br>
-{formatted_desc}
-<extra></extra>"""
-            hover_text.append(hover_info)
-        
-        fig.update_traces(hovertemplate=hover_text)
-        
-        # Améliorer l'apparence
-        fig.update_layout(
-            height=600,
-            scene=dict(
-                xaxis_title="Coût (Prix)",
-                yaxis_title="Complexité", 
-                zaxis_title="Intérêt",
-                bgcolor="rgba(0,0,0,0)"
-            ),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)"
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
+            st.markdown("---")
+
     with main_col2:
         st.subheader("📊 Statistiques de Vote")
         
@@ -976,9 +942,9 @@ def main():
             current_task = all_tasks[st.session_state.current_task_index]
             st.info(f"**Vote collectif :**\nTâche {st.session_state.current_task_index + 1}/{len(all_tasks)}\n*{current_task['name']}*")
         
-        # Top des tâches votées
+        # Top des tâches (maintenu pour info rapide)
         if votes:
-            st.subheader("🏆 Top des tâches")
+            st.subheader("🏆 Top 5 (par nb de votes)")
             task_vote_counts = {}
             # Repasser par all_tasks pour avoir un mapping stable nom<->clé
             for task in all_tasks:
@@ -993,7 +959,7 @@ def main():
                                 key=lambda x: (x[1]["count"], x[1]["avg_score"]), 
                                 reverse=True)
             
-            for i, (task_name, stats) in enumerate(sorted_tasks[:10]):
+            for i, (task_name, stats) in enumerate(sorted_tasks[:5]):
                 # Emoji pour distinguer les nouvelles tâches
                 is_new = any(task['name'] == task_name and task['source'] == 'proposed' for task in all_tasks)
                 emoji = "🆕" if is_new else "📋"
@@ -1009,10 +975,51 @@ def main():
                 st.write(f"   Par: {task['proposed_by']}")
                 st.write(f"   💰{task['cost']} 🔧{task['complexity']} ⭐{task['interest']}")
         
+        # Section Admin
+        st.markdown("---")
+        st.subheader("👑 Section Admin")
+        
+        admin_pwd = st.text_input("Mot de passe admin :", type="password")
+        
+        if admin_pwd == st.secrets.get("ADMIN_PASSWORD", "admin"):
+            st.success("Accès admin autorisé")
+            
+            st.subheader("Réinitialiser les votes d'un participant")
+            
+            user_list = {uid: u.get('name', f"ID: {uid}") for uid, u in users.items()}
+            user_to_reset_id = st.selectbox("Choisir un utilisateur :", options=list(user_list.keys()), format_func=lambda x: user_list[x])
+            
+            if st.button(f"Réinitialiser TOUS les votes de {user_list.get(user_to_reset_id)}", type="primary"):
+                if firebase_ref is not None:
+                    # Supprimer tous les votes de l'utilisateur
+                    all_votes_ref = firebase_ref.child('votes')
+                    all_task_votes = all_votes_ref.get()
+                    if all_task_votes:
+                        for task_key, user_votes in all_task_votes.items():
+                            if user_to_reset_id in user_votes:
+                                all_votes_ref.child(task_key).child(user_to_reset_id).set(None)
+                    
+                    # Réinitialiser les tokens de l'utilisateur
+                    firebase_ref.child('users').child(user_to_reset_id).child('tokens').set(TOKENS_CONFIG.copy())
+                    
+                    st.success(f"Votes de {user_list.get(user_to_reset_id)} réinitialisés.")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    # Mode local
+                    for task_key in list(votes.keys()):
+                        if user_to_reset_id in votes[task_key]:
+                            del votes[task_key][user_to_reset_id]
+                    
+                    users[user_to_reset_id]['tokens'] = TOKENS_CONFIG.copy()
+                    save_data_local(votes, users, additional_tasks)
+                    st.success(f"Votes de {user_list.get(user_to_reset_id)} réinitialisés (local).")
+                    time.sleep(1)
+                    st.rerun()
+
         # Indicateur de dernière mise à jour
         st.markdown("---")
         st.caption(f"Dernière actualisation: {datetime.now().strftime('%H:%M:%S')}")
 
 if __name__ == "__main__":
     main()
-
