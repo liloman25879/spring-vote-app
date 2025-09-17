@@ -992,23 +992,35 @@ def main():
             
             if st.button(f"Réinitialiser TOUS les votes de {user_list.get(user_to_reset_id)}", type="primary"):
                 if firebase_ref is not None:
-                    # Parcourir toutes les tâches et supprimer les votes de cet utilisateur
+                    # Opération atomique pour supprimer tous les votes et réinitialiser les tokens
+                    updates = {}
+                    
+                    # 1. Préparer la suppression de tous les votes de l'utilisateur
                     all_votes_ref = firebase_ref.child('votes')
-                    all_tasks_with_votes = all_votes_ref.get(shallow=True) # Get only task keys
+                    all_task_votes = all_votes_ref.get()
+                    if all_task_votes:
+                        for task_key, user_votes in all_task_votes.items():
+                            if user_to_reset_id in user_votes:
+                                # Ajouter le chemin de suppression à la mise à jour
+                                updates[f'votes/{task_key}/{user_to_reset_id}'] = None
                     
-                    if all_tasks_with_votes:
-                        for task_key in all_tasks_with_votes.keys():
-                            # Supprimer directement le noeud de l'utilisateur pour cette tâche
-                            all_votes_ref.child(task_key).child(user_to_reset_id).set(None)
+                    # 2. Préparer la réinitialisation des tokens
+                    updates[f'users/{user_to_reset_id}/tokens'] = TOKENS_CONFIG.copy()
                     
-                    # Réinitialiser les tokens de l'utilisateur
-                    firebase_ref.child('users').child(user_to_reset_id).child('tokens').set(TOKENS_CONFIG.copy())
-                    
-                    st.success(f"Votes de {user_list.get(user_to_reset_id)} réinitialisés.")
-                    # Forcer le rechargement des données
-                    st.session_state.clear() 
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        # 3. Exécuter la mise à jour atomique
+                        firebase_ref.update(updates)
+                        
+                        st.success(f"Votes de {user_list.get(user_to_reset_id)} réinitialisés avec succès.")
+                        
+                        # 4. Forcer le rechargement complet de l'application
+                        st.session_state.clear()
+                        time.sleep(1)
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Une erreur est survenue lors de la réinitialisation : {e}")
+
                 else:
                     # Mode local
                     for task_key in list(votes.keys()):
