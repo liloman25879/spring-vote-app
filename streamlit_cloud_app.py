@@ -40,7 +40,7 @@ DESCRIPTIONS_REELLES = {
     "Nouveaux systèmes de filtration nanoparticule": "Des cyclones haute vitesse. Filtration électrostatique. Refroidissement ou pas par l'échangeur. Banc de test PAL. pot à carbone. En delta par rapport au BF310 en rendement, en analyse granul, en perte de charge",
     "Battre des records de durée": "Communication. Savoir comment ça se comporte en fonctionnement continu -> truc de fin de campagne (car il faut qu'Eric soit 100% opérationnel + helpers)",
     "Caractériser impuretés dans le gaz a différentes étapes process": "- Savoir prélever du gaz sale, chaud-froid, gérer l'ATEX et la géométrie des points de prélèvements... - Savoir analyser les particules (distribution, HAP etc...) - Savoir trouver de struc inattendu (poussière de réfractaire, oxyde métalliques, soufre etc..) - Gestion des échantillons avec des labos externes etc... Mise au point des méthodes d'échantillonnage et d'analyse pour SPRING.",
-    "Miscibilité CH4 – H2": "Selon les écoulements et la température ???",
+    "Miscibilité CH4 vs H2": "Selon les écoulements et la température ???",
     "Tester les impuretés du feedstock": "Vapeur d'eau, éthane, mercaptans, CO2, azote, H2 - Impact sur la durabilité des électrodes - Impact sur la détection pont de carbone - Impact sur la régulation de manière générale (UGF etc...) - Structure du carbone de plasmalyse (graphène?)",
     "Étanchéification presse étoupe des résistances du convertisseur": "Aide pour le bilan matière - Capot pressurisé en azote à 20mbar mini et presse étoupe pour les câbles (ATEX zone 1 dans la boîte)",
     "Combustion des gaz de CH5": "Savoir designer, implanter et opérer une torchère. Designer et opérer une torche pour CH5 - Engineering - Impacts sécurité (plan de prévention etc...) - Améliorer les performances environnementales de CH5 - Tester le résidu carbone (pluging brûleur)",
@@ -1015,3 +1015,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
