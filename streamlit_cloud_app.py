@@ -19,42 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Descriptions réelles des tâches
-DESCRIPTIONS_REELLES = {
-    "Caractéristique hydraulique de la T8": "AU LABO : caractérisation Delta P vs débit, gap voir production (fréquence, tension), densité gaz. Permet de dérisquer le pilotage en pression de SPRING. Comprendre l'impact du GAP et de la présence plasma, du gaz de plasmalyse (micro déflagration CO2). Monter un PT à la place du TT, faire des calculs de perte de charge sur les conduites 6 mm.",
-    "Bouclage bilan matière": "Acquisitions de méthodes nécessaires pour SPRING (bras mort / formules, outils de mesure - débitmètre basse pression). - Trouver et installer un débit mètre volumique - Automatiser le calcul massique avec le MADUR - Mettre des pesons sur le four remontés dans l'automate. - Interpréter les résultats : bouclage Carbone et bouclage Hydrogène. Rendements avec et sans plasmalyse. Accumulation de goudrons qui sont ensuite craqués. Estimation du volume de carbone produit. Efficacité des mécanismes de régénération type BOUDOUARD",
-    "Approche empirique des adsorptions H2 dans les réfractaires": "Comprendre le temps nécessaire pour désorber l'hydrogène du four.",
-    "Effet Lensing sur la T8": "Comprendre les conditions d'apparition d'un plasma focalisé (défaut de parallélisme des électrodes, modification du gap, apparition de pont de carbone, défaut de concentricité des électrodes, encrassement). Enjeux : - Ablation des électrodes, - Taux de conversion - Mixing - Faux positif sur la détection pont de carbone. Tâche de fond OPS. Besoin de cathodes nickel.",
-    "Comprendre l'érosion des électrodes vs l'écoulement": "On est passé d'une cathode concave à une cathode convexe avec la T8. Est-ce lié au refroidissement central de la T8? Intéressant pour SPRING : - Augmenter le débit? - Diminuer la section du gaz? - Percer la cathode? - Électrode en tiges de cuivre pour avoir une érosion plus rapide que le tungsten? - Trouver les paramètres plasma. - Paramètre du gaz de plasmalyse (CO2) - Cathode gros diamètre pour éviter les pbs de concentricité - Cathode trouée - Cathode massique en carbone",
-    "Fiabilité PDR et MTBF": "Enregistreur d'évènements. Détecter les points faibles de la T8 pour SPRING. Modif cockpit : suivi des pièces d'usure + le calcul et le dashboarding des heures et paramètres de production. Upgrade du labéliseur d'évènement : labéliseur de maintenance. Ronde intermédiaire (test de la cathode ajustable)",
-    "Mesure UI : impact régulation plasma sur le couple T8 GF1R0": "Temps de mise en œuvre. Important avec beaucoup d'interface. APPRENTISSAGE SPRING",
-    "Régénération mécanique des ponts de carbones": "Le CO2 ne sera peut-être pas possible sur SPRING (impacte la qualité carbone). Il faudra une solution mécanique. Complexité importante et potentiellement changement de l'AF.",
-    "Mobilité carbone vs température de peau vs surface": "Thermoforèse - LABO - utiliser le préchauffeur et le générateur de flux sale pour faire des tests. Tester le teflon.",
-    "Régénération pont de carbone H2": "Pour le labo ? Si pas de pont de carbone alors CH5 ...",
-    "Relation Process / Qualité carbone / apparition PC / érosion électrode / température": "- Finir le plan de test Température - T240 et T241 à 1200 et 1300°C - Tester d'autres paramètres : pression à 300mbar dans le Réacteur ou le convertisseur (à quel point est ce défavorable?) Fréquence gap tension - Contrôle du temps de séjour dans le four (Mouffle) : Modélisation du four pour le gas mixing, Gaz traceur pour obtenir les temps de séjour observés (distrib de temps de séjour), Possibilité de modification",
-    "Que se passe-t-il dans le haut de la torche": "Peut-on noyer le T8 dans le réfractaire ou faut-il lui laisser de la liberté pour respirer? Qu'est-ce qui se passe à l'horizontal ou en diagonale? - Compo gaz? -> décantation hydrogène vs CH-CHOC - Impact du 'vide' sur la formation des PC (combler avec de la cera blanket, monter une vieille céramique ...) - LABO - test en horizontal.",
-    "MONITORING système/zone dans cockpit": "Développer des vues dans le temps par système (filtration / convertisseur / plasmalyse / analyse) qui remontent les informations clés pour MONITORER les équipements (ANALYSER et ANTICIPER les pannes): - Des évènements de type sécurité - Des états (nombre d'heures de fonctionnement par sous ensemble) - Des observations utilisateur (pont de carbone, changement de pièces etc...) But c'est de monter en compétence de pilotage pour SPRING (infos clés à remonter hors de SCADA). Si suivi en temps réel exemple : vue par zone des alarmes. Les consignations",
-    "Tester les électrodes en graphite": "Pré requis 11 et surtout 10. Stabilité des GAP, stabilité en régénération CO2 etc... Enjeux : électrodes de spring et carbone conducteur (impureté métalliques)",
-    "Optimisation SEO de la T8": "Prépare les méthodes de caractérisation des torches de SPRING + paramétrage des systèmes pendant la chauffe et la production. Trouver une méthode expérimentale pour obtenir la SEO d'une torche T8, l'implémenter dans CH5 et dans cockpit (vue système). Tester des paramètres à notre disposition : - Gap - Débit/ pression - Compo gaz (N2, H2, CH4, ....) - Pousser les générateurs à 100KHz",
-    "Tester la bande de température de Victor": "????",
-    "Nouveaux systèmes de filtration nanoparticule": "Des cyclones haute vitesse. Filtration électrostatique. Refroidissement ou pas par l'échangeur. Banc de test PAL. pot à carbone. En delta par rapport au BF310 en rendement, en analyse granul, en perte de charge",
-    "Battre des records de durée": "Communication. Savoir comment ça se comporte en fonctionnement continu -> truc de fin de campagne (car il faut qu'Eric soit 100% opérationnel + helpers)",
-    "Caractériser impuretés dans le gaz a différentes étapes process": "- Savoir prélever du gaz sale, chaud-froid, gérer l'ATEX et la géométrie des points de prélèvements... - Savoir analyser les particules (distribution, HAP etc...) - Savoir trouver de struc inattendu (poussière de réfractaire, oxyde métalliques, soufre etc..) - Gestion des échantillons avec des labos externes etc... Mise au point des méthodes d'échantillonnage et d'analyse pour SPRING.",
-    "Miscibilité CH4 – H2": "Selon les écoulements et la température ???",
-    "Tester les impuretés du feedstock": "Vapeur d'eau, éthane, mercaptans, CO2, azote, H2 - Impact sur la durabilité des électrodes - Impact sur la détection pont de carbone - Impact sur la régulation de manière générale (UGF etc...) - Structure du carbone de plasmalyse (graphène?)",
-    "Étanchéification presse étoupe des résistances du convertisseur": "Aide pour le bilan matière - Capot pressurisé en azote à 20mbar mini et presse étoupe pour les câbles (ATEX zone 1 dans la boîte)",
-    "Combustion des gaz de CH5": "Savoir designer, implanter et opérer une torchère. Designer et opérer une torche pour CH5 - Engineering - Impacts sécurité (plan de prévention etc...) - Améliorer les performances environnementales de CH5 - Tester le résidu carbone (pluging brûleur)",
-    "Tester des précurseurs dans le feedstock": "- Précurseurs ferreux pour des nanotubes - KOH pour modifier la structure des agrégats. - Savoir injecter dans le feedstock - Monitorer les impacts durabilité / fiabilité etc.... - Cf 23 mais avec des liquides ou des solides plutôt que des gaz.",
-    "Breveter la T8": "Cf 21",
-    "Mélange nanotubes de carbone et CB du four": "Test pour le carbone conducteur.",
-    "Post-traitement du carbone": "- Élimination des HAP - Broyage - Fonctionnalisation en extrudeuse réactive - Granulation - Séchage - Élastomères prêt à l'emploi - Fonctionnalisation carbone in situ : injection haute température d'adjuvant via TT30X",
-    "Tests de nouveaux générateurs / pilote carbone": "Faisabilité à regarder en fonction des générateurs concernés - Mesures de sécurité - Modification AF - Disponibilité torche etc... - Pré tests en labo.",
-    "Séparation / purification du dihydrogène": "Trouver une membrane basse pression?",
-    "Séparer l'acétylène en sortie de plasma": "Semble excessivement difficile (carbone etc...)",
-    "Nettoyage du convertisseur vapeur/CO2": "Injection de vapeur en amont du four. Intérêt pour SPRING. Risque de choc thermique aux résistances et réfractaire. Impact sur le carbone etc...",
-    "Injection directe de plasma dans le four": "Attention aux chicanes -> utiliser un TT. Mise en place d'une cellule plasma en extérieur (électricité, du gaz)."
-}
-
 # Configuration des tokens de vote par utilisateur (réduits)
 TOKENS_CONFIG = {
     "votes_5": 3,  # 2 votes à 5/5
@@ -375,12 +339,6 @@ def format_text_for_hover(text, line_width=90):
     
     return "<br>".join(formatted_lines)
 
-def get_real_description(task_name):
-    """Récupère la vraie description d'une tâche par correspondance exacte"""
-    if task_name in DESCRIPTIONS_REELLES:
-        return DESCRIPTIONS_REELLES[task_name]
-    return "Description à compléter selon les critères SPRING"
-
 @st.cache_data(ttl=300)  # Cache le CSV pendant 5 minutes (il ne change pas souvent)
 def load_csv_data():
     """Charge les données du CSV"""
@@ -449,9 +407,12 @@ def get_all_tasks(df, additional_tasks):
     # Tâches du CSV
     if df is not None:
         for _, row in df.iterrows():
+            # Utiliser la description du CSV si elle existe, sinon fallback
+            description = row.get('Description', "Description non fournie dans le CSV.")
+            
             all_tasks.append({
                 'name': row['Nouveau_Nom'],
-                'description': get_real_description(row['Nouveau_Nom']),
+                'description': description,
                 'cost_score': row['Score_Prix'],
                 'complexity_score': row['Score_Complexité'],
                 'interest_score': row['Score_Intérêt'],
@@ -781,7 +742,13 @@ def main():
                             # 3. Enregistrer le vote (supprime l'ancien et ajoute le nouveau)
                             if record_vote(firebase_ref, task_key, user_id, user_name, vote_value, previous_vote=previous_vote_obj):
                                 # Mettre à jour le cache local pour réactivité
-                                st.session_state.votes_data, st.session_state.users_data, _, _ = load_live_data(firebase_ref)
+                                # Recharger complètement les données depuis la source de vérité (Firebase)
+                                votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
+                                st.session_state.votes_data = votes
+                                st.session_state.users_data = users
+                                st.session_state.additional_tasks_data = additional_tasks
+                                st.session_state.last_data_timestamp = last_updated
+
                                 st.success(f"Vote mis à jour : {vote_value}/5")
                                 time.sleep(0.3)
                                 st.rerun()
@@ -798,28 +765,35 @@ def main():
                                 if name_key in votes and user_id in votes[name_key]:
                                     # Trouver et supprimer le vote
                                     current_user_votes = _flatten_user_votes(votes[name_key][user_id])
-                                    votes[name_key][user_id] = [v for v in current_user_votes if v['score'] != previous_vote_obj['score']]
+                                    # Garder tous les votes sauf celui qui est corrigé
+                                    votes[name_key][user_id] = [v for v in current_user_votes if v.get('vote_id') != previous_vote_obj.get('vote_id')]
 
                             # Décrémenter et ajouter le nouveau
-                            users[user_id]["tokens"][vote_type] -= 1
-                            name_key = sanitize_key(current_task['name'])
-                            if name_key not in votes: votes[name_key] = {}
-                            if user_id not in votes[name_key]: votes[name_key][user_id] = []
-                            
-                            new_vote = {"score": vote_value, "timestamp": datetime.now().isoformat(), "user_name": user_name}
-                            
-                            # S'assurer que c'est une liste
-                            if isinstance(votes[name_key][user_id], dict):
-                                votes[name_key][user_id] = list(votes[name_key][user_id].values())
+                            if users[user_id]["tokens"][vote_type] > 0:
+                                users[user_id]["tokens"][vote_type] -= 1
+                                name_key = sanitize_key(current_task['name'])
+                                if name_key not in votes: votes[name_key] = {}
+                                
+                                new_vote = {"score": vote_value, "timestamp": datetime.now().isoformat(), "user_name": user_name}
+                                
+                                # S'assurer que c'est une liste pour la mise à jour locale
+                                if user_id not in votes[name_key] or not isinstance(votes[name_key][user_id], list):
+                                    votes[name_key][user_id] = []
 
-                            votes[name_key][user_id].append(new_vote)
+                                votes[name_key][user_id].append(new_vote)
 
-                            if save_data_local(votes, users, additional_tasks):
-                                st.session_state.votes_data = votes
-                                st.session_state.users_data = users
-                                st.success(f"Vote mis à jour : {vote_value}/5 (local)")
-                                time.sleep(0.3)
-                                st.rerun()
+                                if save_data_local(votes, users, additional_tasks):
+                                    st.session_state.votes_data = votes
+                                    st.session_state.users_data = users
+                                    st.success(f"Vote mis à jour : {vote_value}/5 (local)")
+                                    time.sleep(0.3)
+                                    st.rerun()
+                                else:
+                                    st.error("Erreur lors de la sauvegarde locale du vote.")
+                            else:
+                                st.warning("Plus de jetons de ce type en mode local.")
+                    else:
+                        st.button(f"{stars}\n(0)", disabled=True, key=f"vote_disabled_{vote_value}_{task_key}", use_container_width=True)
         
         else:
             # Message d'invitation à se connecter
