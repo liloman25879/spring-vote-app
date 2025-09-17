@@ -710,7 +710,6 @@ def main():
             if existing_votes:
                 st.info(f"Vous avez déjà voté : {[v['score'] for v in existing_votes]}")
             
-
             # Boutons de vote
             st.subheader("Voter / Corriger :")
             vote_cols = st.columns(5)
@@ -764,8 +763,7 @@ def main():
                                 st.rerun()
                             else:
                                 st.error("Erreur lors de la mise à jour du vote.")
-                        else:
-                            st.warning("La correction de vote en mode local n'est pas entièrement supportée.")
+                       
                         else: # Mode local
                             # Logique locale similaire
                             if previous_vote_obj:
