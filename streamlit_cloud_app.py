@@ -710,7 +710,7 @@ def main():
             if existing_votes:
                 st.info(f"Vous avez déjà voté : {[v['score'] for v in existing_votes]}")
             
-            # Boutons de vote
+
             # Boutons de vote
             st.subheader("Voter / Corriger :")
             vote_cols = st.columns(5)
@@ -719,7 +719,7 @@ def main():
             sorted_vote_types = sorted(user_tokens.keys(), key=lambda x: int(x.split('_')[1]))
 
             for i, vote_type in enumerate(sorted_vote_types):
-                remaining = user_tokens[vote_type]
+                remaining = user_tokens.get(vote_type, 0)
                 vote_value = int(vote_type.split('_')[1])
                 
                 with vote_cols[i]:
@@ -728,53 +728,44 @@ def main():
                     btn_key = f"vote_{vote_value}_{task_key}"
                     btn_lock_key = f"vote:{user_id}:{task_key}:{vote_value}"
                     
-                    # On peut voter pour corriger même si le token est à 0, si un vote existe déjà
-                    can_vote = remaining > 0 or any(v['score'] != vote_value for v in existing_votes)
+                    # On peut corriger un vote même si le jeton est à 0
+                    has_already_voted = any(v['score'] == vote_value for v in existing_votes)
+                    can_correct = existing_votes and not has_already_voted
                     
-                    # Le bouton est désactivé si on ne peut pas voter ou si le verrou anti-clic est actif
-                    disabled = not can_vote or is_locked(btn_lock_key)
+                    # Le bouton est désactivé si on n'a plus de jetons ET qu'on ne peut pas corriger, ou si le verrou est actif
+                    disabled = (remaining <= 0 and not can_correct) or is_locked(btn_lock_key)
 
                     if st.button(f"{stars}\n({remaining})", key=btn_key, use_container_width=True, disabled=disabled):
                         lock_now(btn_lock_key)
                         
                         previous_vote_obj = existing_votes[0] if existing_votes else None
                         
-                        # Si le vote est identique, ne rien faire
                         if previous_vote_obj and previous_vote_obj['score'] == vote_value:
                             st.toast("Vous avez déjà voté cette valeur.")
                             st.rerun()
 
                         # --- Logique de correction de vote ---
                         if firebase_ref is not None:
-                            # 1. Rembourser l'ancien token si un vote existait
                             if previous_vote_obj:
                                 old_vote_type = f"votes_{previous_vote_obj['score']}"
                                 increment_token(firebase_ref, user_id, old_vote_type)
-                                users[user_id]["tokens"][old_vote_type] += 1
 
-                            # 2. Décrémenter le nouveau token
                             ok = decrement_token(firebase_ref, user_id, vote_type)
                             if not ok:
                                 st.error("Plus de tokens disponibles pour ce type de vote.")
-                                # Annuler le remboursement si le nouveau vote échoue
                                 if previous_vote_obj:
                                     decrement_token(firebase_ref, user_id, f"votes_{previous_vote_obj['score']}")
                                 st.rerun()
                             
-                            # 3. Enregistrer le vote
                             if record_vote(firebase_ref, task_key, user_id, user_name, vote_value, previous_vote=previous_vote_obj):
-                                # Recharger complètement les données pour garantir la cohérence
-                                votes, users, additional_tasks, last_updated = load_live_data(firebase_ref)
-                                st.session_state.votes_data = votes
-                                st.session_state.users_data = users
-                                st.session_state.additional_tasks_data = additional_tasks
-                                st.session_state.last_data_timestamp = last_updated
+                                st.session_state.clear() # Forcer le rechargement complet
                                 st.success(f"Vote mis à jour : {vote_value}/5")
-                                time.sleep(0.3)
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 st.error("Erreur lors de la mise à jour du vote.")
-                        
+                        else:
+                            st.warning("La correction de vote en mode local n'est pas entièrement supportée.")
                         else: # Mode local
                             # Logique locale similaire
                             if previous_vote_obj:
